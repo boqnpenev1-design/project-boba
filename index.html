@@ -229,7 +229,7 @@ input{background:#333;cursor:text}button:hover{background:#5f86d6}
   <input type="range" id="music-slider" min="0" max="100" value="40" style="width:140px;cursor:pointer" oninput="setMusicVol(this.value)">
   <span id="music-val">40%</span>
 </div><div id="kb" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;width:min(340px,86vw)"></div><button data-a="done">Done</button></div>
-<div id="pause" class="scr pa hid"><h1 style="font-size:40px">Paused</h1><button data-a="resume">Resume</button><button data-a="setp">Settings</button><button data-a="quit">Quit</button></div>
+<div id="pause" class="scr pa hid"><h1 style="font-size:40px">Paused</h1><button data-a="resume">Resume</button><button id="btn-mode-toggle" onclick="toggleGameMode()" style="background:#2980b9;border-color:#1c5980;display:none">Mode: Survival</button><button data-a="setp">Settings</button><button data-a="quit">Quit</button></div>
 
 <div id="dead" class="scr pa hid"><h1 style="font-size:36px;color:#f55">You died!</h1><button data-a="resp">Respawn</button><button data-a="quit">Title screen</button></div>
 <div id="err" style="position:fixed;top:0;left:0;z-index:99;background:#900;color:#fff;font:12px monospace;padding:4px;display:none;white-space:pre-wrap"></div>
@@ -301,8 +301,8 @@ mkB('Farmland','#4e341c',0.6,0,0);
 mkB('Red Bed','#b02e26',0.2,0,1);
 mkB('Wheat Crops','#7bb04a',0.1,0,1);mkB('Carrot Crops','#ee8a1c',0.1,0,1);mkB('Potato Crops','#c9a35c',0.1,0,1);
 NS[NID['Wheat Crops']]=NS[NID['Carrot Crops']]=NS[NID['Potato Crops']]=1;
-const NON_FULL=new Set([NID.Torch,NID['Soul Torch'],NID.Lantern,NID['Soul Lantern'],NID.Anvil,NID['Oak Button'],NID.Chain,NID['Flower Pot'],NID.Ladder,NID['Oak Door'],NID['Oak Fence'],NID['Oak Fence Gate'],NID['Oak Sapling'],NID['Glass Pane'],NID['Red Bed'],NID.Farmland,NID['Wheat Crops'],NID['Carrot Crops'],NID['Potato Crops']]);
-TR.add(NID['Oak Sapling']);TR.add(NID['Glass Pane']);TR.add(NID.Glass);TR.add(NID['Oak Door']);TR.add(NID['Oak Fence Gate']);TR.add(NID['Oak Button']);TR.add(NID.Farmland);TR.add(NID['Wheat Crops']);TR.add(NID['Carrot Crops']);TR.add(NID['Potato Crops']);TR.add(NID['Red Bed']);
+const NON_FULL=new Set([NID.Torch,NID['Soul Torch'],NID.Lantern,NID['Soul Lantern'],NID.Anvil,NID['Oak Button'],NID.Chain,NID['Flower Pot'],NID.Ladder,NID['Oak Door'],NID['Oak Fence'],NID['Oak Fence Gate'],NID['Oak Sapling'],NID['Glass Pane'],NID['Red Bed'],NID['Wheat Crops'],NID['Carrot Crops'],NID['Potato Crops']]);
+TR.add(NID['Oak Sapling']);TR.add(NID['Glass Pane']);TR.add(NID.Glass);TR.add(NID['Oak Door']);TR.add(NID['Oak Fence Gate']);TR.add(NID['Oak Button']);TR.add(NID['Wheat Crops']);TR.add(NID['Carrot Crops']);TR.add(NID['Potato Crops']);TR.add(NID['Red Bed']);
 const LIGHT_EMIT=new Set([NID.Torch,NID['Soul Torch'],NID.Lantern,NID['Soul Lantern'],NID.Campfire,NID['Soul Campfire'],NID.Lava]);
 const activeLights={};
 // SPAWN EGGS FOR ALL MOBS
@@ -369,7 +369,7 @@ const XH=['Slimeball','Ender Pearl','Phantom Membrane','Carrot','Potato','Poison
 function xm(m){if(Math.random()<.3){const a=HOST[m.type]?XH:XP;spawnDrop(NID[a[rnd(0,a.length-1)]],1,m.p.x,m.p.y+.5,m.p.z)}}
 // ===== camera (F5) =====
 function camView(){const d=new V3();cam.getWorldDirection(d);const c=cam.position;rp.copy(c);vy=pl.yaw;vp=pl.pitch;hand.style.display=persp?'none':'';if(!persp)return;const s=persp==1?-1:1;let t=0;for(;t<4;t+=.1){const q=get(Math.floor(c.x+d.x*s*t),Math.floor(c.y+d.y*s*t),Math.floor(c.z+d.z*s*t));if(q&&q!=NID.Water&&q!=NID.Lava)break}t=Math.max(.3,t-.25);rp.set(c.x+d.x*s*t,c.y+d.y*s*t,c.z+d.z*s*t);if(persp==2){vy=pl.yaw+Math.PI;vp=-pl.pitch}}
-function drawPlayerModel(tri, px, py, pz, yaw, pitch, swingArm, walkAnim, teamCol, isHurt, isCrouch){
+function drawPlayerModel(tri, px, py, pz, yaw, pitch, swingArm, walkAnim, teamCol, isHurt, isCrouch, armPieces, heldId){
   const red = [1.0, 0.2, 0.2];
   const skin = isHurt ? red : [0.82, 0.56, 0.42];
   const hair = isHurt ? red : [0.32, 0.18, 0.08];
@@ -381,15 +381,15 @@ function drawPlayerModel(tri, px, py, pz, yaw, pitch, swingArm, walkAnim, teamCo
 
   const crouchDrop = isCrouch ? 0.22 : 0;
   const crouchFwd = isCrouch ? 0.12 : 0;
-  const fwdOffX = -Math.sin(yaw) * crouchFwd;
-  const fwdOffZ = -Math.cos(yaw) * crouchFwd;
+  const fwdVecX = -Math.sin(yaw), fwdVecZ = -Math.cos(yaw);
+  const fwdOffX = fwdVecX * crouchFwd, fwdOffZ = fwdVecZ * crouchFwd;
 
-  // --- Head (yaw + pitch) ---
+  // --- Head ---
   const headY = py + 1.5 - crouchDrop;
   const hx = px + fwdOffX, hz = pz + fwdOffZ;
   pushBox(tri, hx, headY, hz, 0.22, 0.22, 0.22, yaw, 0, ...skin);
   pushBox(tri, hx, headY + 0.12, hz, 0.23, 0.08, 0.23, yaw, 0, ...hair);
-  const fwdX = -Math.sin(yaw) * 0.23, fwdZ = -Math.cos(yaw) * 0.23;
+  const fwdX = fwdVecX * 0.23, fwdZ = fwdVecZ * 0.23;
   const rgtX = Math.cos(yaw) * 0.08, rgtZ = -Math.sin(yaw) * 0.08;
   
   pushBox(tri, hx + fwdX - rgtX, headY + 0.02, hz + fwdZ - rgtZ, 0.04, 0.03, 0.015, yaw, 0, ...eyeW);
@@ -398,36 +398,66 @@ function drawPlayerModel(tri, px, py, pz, yaw, pitch, swingArm, walkAnim, teamCo
   pushBox(tri, hx + fwdX + rgtX*1.2, headY + 0.02, hz + fwdZ + rgtZ*1.2, 0.02, 0.025, 0.02, yaw, 0, ...pupil);
   pushBox(tri, hx + fwdX, headY - 0.08, hz + fwdZ, 0.06, 0.02, 0.015, yaw, 0, ...mouth);
 
+  // Helmet
+  if(armPieces && armPieces[0] && AR[armPieces[0]]){
+    const hCol = rgb(AR[armPieces[0]][2], 1.0);
+    pushBox(tri, hx, headY + 0.03, hz, 0.24, 0.24, 0.24, yaw, 0, ...hCol);
+  }
+
   // --- Torso ---
   const torsoY = py + 0.95 - crouchDrop * 0.8;
   pushBox(tri, px + fwdOffX * 0.5, torsoY, pz + fwdOffZ * 0.5, 0.22, 0.3, 0.12, yaw, 0, ...shirt);
+  if(armPieces && armPieces[1] && AR[armPieces[1]]){
+    const cCol = rgb(AR[armPieces[1]][2], 1.0);
+    pushBox(tri, px + fwdOffX * 0.5, torsoY, pz + fwdOffZ * 0.5, 0.24, 0.31, 0.14, yaw, 0, ...cCol);
+  }
 
-  // --- Left & Right Arms ---
+  // --- Left & Right Arms (Natural walking swing forward and back) ---
   const armOffset = 0.3;
-  const lx = px - Math.cos(yaw) * armOffset + fwdOffX * 0.5;
-  const lz = pz + Math.sin(yaw) * armOffset + fwdOffZ * 0.5;
-  const rx = px + Math.cos(yaw) * armOffset + fwdOffX * 0.5;
-  const rz = pz - Math.sin(yaw) * armOffset + fwdOffZ * 0.5;
-  
-  const armSwing = Math.sin(walkAnim) * (isCrouch ? 0.2 : 0.4);
-  pushBox(tri, lx, torsoY - armSwing * 0.1, lz, 0.08, 0.28, 0.08, yaw, 0, ...skin);
-  
+  const armSwing = Math.sin(walkAnim) * (isCrouch ? 0.2 : 0.45);
+  const lx = px - Math.cos(yaw) * armOffset + fwdOffX * 0.5 + fwdVecX * armSwing * 0.35;
+  const lz = pz + Math.sin(yaw) * armOffset + fwdOffZ * 0.5 + fwdVecZ * armSwing * 0.35;
+  pushBox(tri, lx, torsoY, lz, 0.08, 0.28, 0.08, yaw, 0, ...skin);
+
   const isSwinging = swingArm > 0;
-  const rArmY = isSwinging ? torsoY + 0.08 : torsoY + armSwing * 0.1;
-  const rArmFwd = isSwinging ? 0.15 : 0;
-  pushBox(tri, rx - Math.sin(yaw) * rArmFwd, rArmY, rz - Math.cos(yaw) * rArmFwd, 0.08, 0.28, 0.08, yaw, 0, ...skin);
+  const rArmSwing = isSwinging ? 0.35 : -armSwing * 0.35;
+  const rx = px + Math.cos(yaw) * armOffset + fwdOffX * 0.5 + fwdVecX * rArmSwing;
+  const rz = pz - Math.sin(yaw) * armOffset + fwdOffZ * 0.5 + fwdVecZ * rArmSwing;
+  const rArmY = isSwinging ? torsoY + 0.08 : torsoY;
+  pushBox(tri, rx, rArmY, rz, 0.08, 0.28, 0.08, yaw, 0, ...skin);
+
+  // Held Item in Right Hand
+  if(heldId && T[heldId]){
+    const hItemX = rx + fwdVecX * 0.22, hItemY = rArmY - 0.12, hItemZ = rz + fwdVecZ * 0.22;
+    if(isB(heldId)){
+      pushBox(tri, hItemX, hItemY, hItemZ, 0.09, 0.09, 0.09, yaw, heldId * 3, 1, 1, 1);
+    } else {
+      pushBox(tri, hItemX, hItemY, hItemZ, 0.12, 0.12, 0.02, yaw + 0.6, heldId * 3, 1, 1, 1);
+    }
+  }
 
   // --- Left & Right Legs ---
   const legY = py + 0.33 - (isCrouch ? 0.08 : 0);
   const legOffset = 0.08;
-  const legSwing = Math.sin(walkAnim) * (isCrouch ? 0.08 : 0.15);
-  const legLx = px - Math.cos(yaw) * legOffset - Math.sin(yaw) * legSwing - fwdOffX * 0.2;
-  const legLz = pz + Math.sin(yaw) * legOffset - Math.cos(yaw) * legSwing - fwdOffZ * 0.2;
-  const legRx = px + Math.cos(yaw) * legOffset + Math.sin(yaw) * legSwing - fwdOffX * 0.2;
-  const legRz = pz - Math.sin(yaw) * legOffset + Math.cos(yaw) * legSwing - fwdOffZ * 0.2;
+  const legSwing = Math.sin(walkAnim) * (isCrouch ? 0.1 : 0.4);
+  const legLx = px - Math.cos(yaw) * legOffset - fwdVecX * legSwing * 0.35 - fwdOffX * 0.2;
+  const legLz = pz + Math.sin(yaw) * legOffset - fwdVecZ * legSwing * 0.35 - fwdOffZ * 0.2;
+  const legRx = px + Math.cos(yaw) * legOffset + fwdVecX * legSwing * 0.35 - fwdOffX * 0.2;
+  const legRz = pz - Math.sin(yaw) * legOffset + fwdVecZ * legSwing * 0.35 - fwdOffZ * 0.2;
   
   pushBox(tri, legLx, legY, legLz, 0.09, 0.33, 0.11, yaw, 0, ...pants);
   pushBox(tri, legRx, legY, legRz, 0.09, 0.33, 0.11, yaw, 0, ...pants);
+
+  if(armPieces && armPieces[2] && AR[armPieces[2]]){
+    const lCol = rgb(AR[armPieces[2]][2], 1.0);
+    pushBox(tri, legLx, legY + 0.04, legLz, 0.10, 0.28, 0.12, yaw, 0, ...lCol);
+    pushBox(tri, legRx, legY + 0.04, legRz, 0.10, 0.28, 0.12, yaw, 0, ...lCol);
+  }
+  if(armPieces && armPieces[3] && AR[armPieces[3]]){
+    const bCol = rgb(AR[armPieces[3]][2], 1.0);
+    pushBox(tri, legLx, legY - 0.16, legLz, 0.11, 0.15, 0.13, yaw, 0, ...bCol);
+    pushBox(tri, legRx, legY - 0.16, legRz, 0.11, 0.15, 0.13, yaw, 0, ...bCol);
+  }
 }
 
 let swingTimer = 0;
@@ -471,13 +501,13 @@ function drawFirstPersonHand(tri){
   const cBotSleeve = [0.04 * b, 0.40 * b, 0.46 * b];
   const cFist      = [0.74 * b, 0.50 * b, 0.36 * b];
   
-  // Hand starts from offscreen bottom-right (shoulder) and extends seamlessly into view
-  const bX = 0.46 + bobX - swIn, bY = -0.45 + bobY - swDown, bZ = 0.14 + swFwd;
-  const mX = 0.32 + bobX - swIn, mY = -0.28 + bobY - swDown, mZ = 0.38 + swFwd;
-  const tX = 0.20 + bobX - swIn, tY = -0.14 + bobY - swDown, tZ = 0.64 + swFwd;
+  // Hand tucked in comfortably to bottom-right corner (compact, vanilla Minecraft feel)
+  const bX = 0.38 + bobX - swIn, bY = -0.38 + bobY - swDown, bZ = 0.22 + swFwd;
+  const mX = 0.30 + bobX - swIn, mY = -0.28 + bobY - swDown, mZ = 0.32 + swFwd;
+  const tX = 0.22 + bobX - swIn, tY = -0.20 + bobY - swDown, tZ = 0.44 + swFwd;
   
-  const hw0 = 0.075, hh0 = 0.075;
-  const hw1 = 0.060, hh1 = 0.060;
+  const hw0 = 0.070, hh0 = 0.070;
+  const hw1 = 0.055, hh1 = 0.055;
   
   const P = (lx, ly, lz) => [
     camX + rgt[0]*lx + up[0]*ly + fwd[0]*lz,
@@ -510,21 +540,24 @@ function drawFirstPersonHand(tri){
   
   const s = cur();
   if(s && T[s.id]){
-    const iPos = P(tX - 0.02, tY + 0.04, tZ + 0.08);
-    const armYaw = pl.yaw - 0.25 - swP * 0.35;
+    const iPos = P(tX - 0.03, tY + 0.02, tZ + 0.05);
+    const armYaw = pl.yaw - 0.35 - swP * 0.55;
     if(isB(s.id)){
       pushBox(tri, iPos[0], iPos[1], iPos[2], 0.08, 0.08, 0.08, armYaw, s.id * 3, b, b, b);
     } else {
-      pushBox(tri, iPos[0], iPos[1], iPos[2], 0.11, 0.11, 0.02, armYaw, s.id * 3, b, b, b);
+      // Tilted tool angled forward with swing rotation
+      pushBox(tri, iPos[0], iPos[1] - swP * 0.08, iPos[2] + swP * 0.05, 0.12, 0.12, 0.02, armYaw + 0.785, s.id * 3, b, b, b);
     }
   }
 }
 
 function ownBody(tri){
   if(persp > 0){
-    const isSwinging = hand.classList.contains("sw");
-    const walk = (Math.abs(pl.v.x) + Math.abs(pl.v.z) > 0.1) ? performance.now() * 0.012 : 0;
-    drawPlayerModel(tri, pl.p.x, pl.p.y, pl.p.z, pl.yaw, pl.pitch, isSwinging ? 1 : 0, walk, [0.15, 0.65, 0.7], false, crouch);
+    const isSwinging = hand.classList.contains("sw") || swingTimer > 0;
+    const walk = (Math.hypot(pl.v.x, pl.v.z) > 0.1 && pl.ground) ? performance.now() * 0.012 : 0;
+    const myArm = arm.map(a => a ? a.id : 0);
+    const myHeld = cur() ? cur().id : 0;
+    drawPlayerModel(tri, pl.p.x, pl.p.y, pl.p.z, pl.yaw, pl.pitch, isSwinging ? 1 : 0, walk, [0.15, 0.65, 0.7], false, crouch, myArm, myHeld);
   }
 }
 // ===== names, chat, maps =====
@@ -837,30 +870,99 @@ let myName='Player',chatOn=false,MAPV=null,known=new Set(),MAPN=0,SPX=24,SPZ=24;
 try{$('#pn').value=localStorage.getItem('boba_name')||''}catch(e){}
 function enforceUniqueName(baseName){
   let candidate = baseName;
+  const existingNames = new Set(peersList.filter(q => !q.isMe).map(pn));
   let counter = 1;
-  const existingNames = new Set(peersList.map(pn));
   while(existingNames.has(candidate)){
     candidate = baseName + '_' + counter++;
   }
   return candidate;
 }
-function getName(){let n=($('#pn').value||'').trim().slice(0,16);if(!n){try{n=localStorage.getItem('boba_name')||''}catch(e){}}if(!n)n='Player'+rnd(100,999);try{localStorage.setItem('boba_name',n)}catch(e){}$('#pn').value=n;return enforceUniqueName(n);}
+function getName(){
+  let n=($('#pn').value||'').trim().slice(0,16);
+  if(!n){try{n=localStorage.getItem('boba_name')||''}catch(e){}}
+  if(!n) n='Player'+rnd(100,999);
+  try{localStorage.setItem('boba_name',n)}catch(e){}
+  $('#pn').value=n;
+  return n;
+}
 function pickMap(){if(MAPV!=null)return MAPV;let n;try{n=+localStorage.getItem('boba_map')||0;localStorage.setItem('boba_map',(n+1)%10)}catch(e){n=rnd(0,9)}return n%10}
 const pn=q=>q.presence&&q.presence.n||'?',pcol=q=>{let h=0;for(const ch of q.peer)h=(h*31+ch.charCodeAt(0))%6;return HEXC[h]};
 function plHTML(){const e=document.createElement('div');peersList.forEach(q=>{const d=document.createElement('div');d.style.color=pcol(q);d.textContent=(q.isMe?myName+' (you)':pn(q));e.append(d)});return e.innerHTML}
 function chatMsg(t,col){const d=document.createElement('div');d.textContent=t;if(col)d.style.color=col;clog.append(d);while(clog.children.length>40)clog.firstChild.remove();setTimeout(()=>d.classList.add('old'),9000)}
 function openChat(pre){chatOn=true;for(const k in keys)keys[k]=false;mining=false;clog.classList.add('open');ci.classList.remove('hid');document.exitPointerLock();ci.value=pre||'';ci.focus()}
 function closeChat(){chatOn=false;clog.classList.remove('open');ci.classList.add('hid');ci.blur();if(playing&&!dead&&!ui)cv.requestPointerLock()}
-function sendChat(t){t=t.trim().slice(0,200);if(!t)return;if(t[0]=='/'){const a=t.slice(1).split(/\s+/),c=a[0].toLowerCase();if(c=='msg'||c=='w'||c=='tell'){const to=a[1],tx=a.slice(2).join(' ');if(!to||!tx)return chatMsg('Usage: /msg <player> <message>','#f88');if(!nr)return chatMsg('Whispers only work in a multiplayer room','#f88');const tg=peersList.find(q=>!q.isMe&&pn(q).toLowerCase()==to.toLowerCase());if(!tg)return chatMsg('No player named '+to,'#f88');chatMsg('[you → '+pn(tg)+'] '+tx,'#d9a0ff');nr.emit('chat',{to:tg.peer,from:myName,t:tx}).catch(()=>{})}else if(c=='me'){const tx=a.slice(1).join(' ');if(!tx)return;chatMsg('* '+myName+' '+tx);if(nr)nr.emit('chat',{from:myName,t:tx,me:1}).catch(()=>{})}else if(c=='players'||c=='list')chatMsg('Online: '+[myName,...peersList.filter(q=>!q.isMe).map(pn)].join(', '));else if(c=='map')chatMsg('Map '+(MAPN+1)+' of 10');else if(c=='gamemode'||c=='gm'){const m=a[1]?a[1].toLowerCase():'';if(m==='c'||m==='1'||m==='creative'){gameMode=1;}else if(m==='s'||m==='0'||m==='survival'){gameMode=0;flyMode=false;}else{gameMode=gameMode?0:1;flyMode=false;}updatePauseModeBtn();toast(gameMode?'Gamemode: Creative':'Gamemode: Survival');chatMsg('Gamemode set to '+(gameMode?'Creative':'Survival'),'#7fff3a');}else if(c=='creative'||c=='c'){openCreativeInv();}else if(c=='help')chatMsg('/gamemode <c/s> • /creative • /msg <player> <text> • /me <text> • /players • /map','#ff0');else chatMsg('Unknown command. Try /help','#f88');return}
-chatMsg('<'+myName+'> '+t);if(nr)nr.emit('chat',{from:myName,t}).catch(()=>{})}
+function sendChat(t){
+  t=t.trim().slice(0,200);if(!t)return;
+  const isMP = isMultiplayerWorld || !!nr || (activeWorldId === 'server_9a') || hostIsRunning;
+  const lower = t.toLowerCase();
+  const raw = lower.startsWith('/') ? lower.slice(1).trim() : lower;
+  const parts = raw.split(/\s+/);
+  const cmd = parts[0];
+
+  // Intercept gamemode commands whether typed with slash or directly (e.g. creative, gamemode, /creative, /gamemode)
+  if(cmd === 'gamemode' || cmd === 'gm' || cmd === 'creative' || (lower.startsWith('/') && cmd === 'c')){
+    if(isMP){
+      gameMode = 0; flyMode = false;
+      chatMsg('Creative mode is disabled in multiplayer.', '#f88');
+      return;
+    }
+    const m = parts[1] || '';
+    if(m === 's' || m === '0' || m === 'survival'){
+      gameMode = 0; flyMode = false;
+    } else {
+      gameMode = 1;
+    }
+    updatePauseModeBtn();
+    toast(gameMode ? 'Gamemode: Creative' : 'Gamemode: Survival');
+    chatMsg('Gamemode set to ' + (gameMode ? 'Creative' : 'Survival'), '#7fff3a');
+    return;
+  }
+
+  if(t[0] === '/'){
+    const a = t.slice(1).split(/\s+/), c = a[0].toLowerCase();
+    if(c === 'msg' || c === 'w' || c === 'tell'){
+      const to = a[1], tx = a.slice(2).join(' ');
+      if(!to || !tx) return chatMsg('Usage: /msg <player> <message>', '#f88');
+      if(!nr) return chatMsg('Whispers only work in a multiplayer room', '#f88');
+      const tg = peersList.find(q => !q.isMe && pn(q).toLowerCase() === to.toLowerCase());
+      if(!tg) return chatMsg('No player named ' + to, '#f88');
+      chatMsg('[you -> ' + pn(tg) + '] ' + tx, '#d9a0ff');
+      nr.emit('chat', { to: tg.peer, from: myName, t: tx }).catch(()=>{});
+    } else if(c === 'me'){
+      const tx = a.slice(1).join(' ');
+      if(!tx) return;
+      chatMsg('* ' + myName + ' ' + tx);
+      if(nr) nr.emit('chat', { from: myName, t: tx, me: 1 }).catch(()=>{});
+    } else if(c === 'players' || c === 'list'){
+      chatMsg('Online: ' + [myName, ...peersList.filter(q => !q.isMe).map(pn)].join(', '));
+    } else if(c === 'map'){
+      chatMsg('Map ' + (MAPN + 1) + ' of 10');
+    } else if(c === 'help'){
+      chatMsg('/gamemode <c/s> * /creative * /msg <player> <text> * /me <text> * /players * /map', '#ff0');
+    } else {
+      chatMsg('Unknown command. Try /help', '#f88');
+    }
+    return;
+  }
+  chatMsg('<' + myName + '> ' + t);
+  if(nr) nr.emit('chat', { from: myName, t }).catch(()=>{});
+}
 ci.addEventListener('keydown',e=>{e.stopPropagation();if(e.key=='Enter'){const v=ci.value;closeChat();sendChat(v)}else if(e.key=='Escape')closeChat()});
 function onChat(d){const me=peersList.find(q=>q.isMe);if(d.to&&(!me||d.to!==me.peer))return;const f=String(d.from||'?').slice(0,16),t=String(d.t||'').slice(0,200);chatMsg(d.me?'* '+f+' '+t:d.to?'['+f+' → you] '+t:'<'+f+'> '+t,d.to?'#d9a0ff':null)}
 function onPeers(c){
   peersList=c.peers;
+  if(myPublicIp){
+    const sameIp = c.peers.find(q => !q.isMe && q.presence && q.presence.ip && q.presence.ip === myPublicIp);
+    if(sameIp){
+      toast('Rejected: Another player with your IP is already connected.');
+      setTimeout(()=>{ if(nr) nr.close(); show('main'); location.reload(); }, 1200);
+      return;
+    }
+  }
   const duplicate = c.peers.filter(q => !q.isMe && pn(q).toLowerCase() === myName.toLowerCase());
   if(duplicate.length > 0){
     myName = enforceUniqueName(myName);
-    toast('Name adjusted to ' + myName + ' (unique name enforced)');
+    toast('Name adjusted to ' + myName);
     if(nr) nr.presence({ x:+pl.p.x.toFixed(2), y:+pl.p.y.toFixed(2), z:+pl.p.z.toFixed(2), r:+pl.yaw.toFixed(2), p:+pl.pitch.toFixed(2), sw:false, n:myName, ip:myPublicIp }).catch(()=>{});
   }
   const cur=new Set(c.peers.filter(q=>!q.isMe).map(pn));
@@ -1172,8 +1274,10 @@ function genChunk(cx, cz){
             else if(r < 0.065 && y < 7) id = NID.Obsidian;
           }
         }
-        if(y > 1 && y < h - 2 && Math.sin(x * 0.4 + y * 0.5 + m) + Math.sin(z * 0.37 - y * 0.33 + m * 0.6) + Math.sin((x - z) * 0.23 + y * 0.55) > 2.05){
-          id = (y <= 5 || (y <= 11 && hs(x * 3 + y, z * 3, m + 4) < 0.12)) ? NID.Lava : 0;
+        const caveN = Math.sin(x * 0.3 + y * 0.4 + m) + Math.sin(z * 0.28 - y * 0.3 + m * 0.6) + Math.sin((x - z) * 0.2 + y * 0.45);
+        if(y > 1 && y < h - 2 && caveN > 1.95){
+          // In deep caverns: below Y<=9 is glowing lava lake floor, above is open cave air!
+          id = (y <= 9) ? NID.Lava : 0;
         }
         ch.data[lx + lz * 16 + y * 256] = id;
       }
@@ -1182,6 +1286,43 @@ function genChunk(cx, cz){
       }
       if(h < sea - 1 && hs(x, z, m) < 0.35){
         ch.data[lx + lz * 16 + h * 256] = NID.Clay;
+      }
+    }
+  }
+
+  // 1b. Underground & Surface Lava Pools
+  if(hs(cx * 37, cz * 59, 13 + m) < 0.4){
+    const poolLx = 4 + Math.floor(hs(cx * 13, cz * 19, 1) * 8);
+    const poolLz = 4 + Math.floor(hs(cx * 23, cz * 31, 2) * 8);
+    const poolY = 5 + Math.floor(hs(cx * 29, cz * 43, 3) * 5); // Y = 5..9
+    const poolRad = 3.4 + hs(cx * 7, cz * 11, 4) * 2.0;
+    for(let dz = -5; dz <= 5; dz++){
+      for(let dx = -5; dx <= 5; dx++){
+        const d = Math.hypot(dx, dz);
+        if(d <= poolRad){
+          const plx = poolLx + dx, plz = poolLz + dz;
+          if(plx >= 0 && plx < 16 && plz >= 0 && plz < 16){
+            ch.data[plx + plz * 16 + poolY * 256] = NID.Lava;
+            for(let ay = poolY + 1; ay <= poolY + 3; ay++){
+              if(ay < H) ch.data[plx + plz * 16 + ay * 256] = 0; // Open air above lava pool
+            }
+            if(poolY - 1 >= 1 && ch.data[plx + plz * 16 + (poolY - 1) * 256] === 0){
+              ch.data[plx + plz * 16 + (poolY - 1) * 256] = NID.Obsidian;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Register light for underground lava blocks in chunk
+  for(let lz = 2; lz < 16; lz += 6){
+    for(let lx = 2; lx < 16; lx += 6){
+      for(let y = 3; y < 14; y += 3){
+        if(ch.data[lx + lz * 16 + y * 256] === NID.Lava){
+          registerLight(wx + lx, y, wz + lz, 12);
+          break;
+        }
       }
     }
   }
@@ -1255,14 +1396,43 @@ function gen(){
   dirty = true;
 }
 
-const activeFluids = new Set(), activeSand = new Set();
+const activeFluids = new Set(), activeSand = new Set(), fluidFlowDist = new Map();
+const thrownEggs = [];
+const fallingBlocks = [];
+
+function spawnFallingBlock(x, y, z, id){
+  const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
+  const ch = chunks.get(cx + ',' + cz);
+  if(!ch) return;
+  const lx = (x % 16 + 16) % 16, lz = (z % 16 + 16) % 16;
+  if(ch.data[lx + lz * 16 + y * 256] !== id) return;
+  ch.data[lx + lz * 16 + y * 256] = 0;
+  edits.set(x + ',' + y + ',' + z, 0);
+  ch.dirty = true;
+  ch.mesh = null;
+  dirty = true;
+  fallingBlocks.push({ id, x: x + 0.5, y: y + 0.5, z: z + 0.5, vy: 0 });
+}
+function throwEgg(){
+  const cp = Math.cos(pl.pitch), sp = Math.sin(pl.pitch);
+  thrownEggs.push({
+    x: pl.p.x, y: pl.p.y + 1.5, z: pl.p.z,
+    vx: -Math.sin(pl.yaw) * cp * 18,
+    vy: sp * 18 + 2.5,
+    vz: -Math.cos(pl.yaw) * cp * 18,
+    age: 0
+  });
+  SFX.bow();
+}
 function triggerFluidSandUpdate(x, y, z){
   if(y < 1 || y >= H - 1) return;
   for(let cy = y; cy < H - 1; cy++){
-    if(get(x, cy + 1, z) === 8){ activeSand.add(x + ',' + (cy + 1) + ',' + z); }
-    else break;
+    const b = get(x, cy, z);
+    if(b === 8){
+      const below = get(x, cy - 1, z);
+      if(below === 0 || below === NID.Water) activeSand.add(x + ',' + cy + ',' + z);
+    } else if(b !== 0) break;
   }
-  if(get(x, y, z) === 8) activeSand.add(x + ',' + y + ',' + z);
   const dirs = [[0,0,0],[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]];
   for(const [dx,dy,dz] of dirs){
     const b = get(x+dx, y+dy, z+dz);
@@ -1271,7 +1441,7 @@ function triggerFluidSandUpdate(x, y, z){
 }
 function simWorldPhysics(){
   if(!playing) return;
-  // Sand Gravity
+  // Sand Gravity via smooth FallingBlock entities (zero chunk mesh thrashing, solid 60 FPS)
   if(activeSand.size > 0){
     const sandBatch = Array.from(activeSand).slice(0, 30);
     for(const k of sandBatch){
@@ -1280,9 +1450,7 @@ function simWorldPhysics(){
       if(get(sx, sy, sz) === 8){
         const below = get(sx, sy - 1, sz);
         if(below === 0 || below === NID.Water){
-          setB(sx, sy, sz, 0);
-          setB(sx, sy - 1, sz, 8);
-          activeSand.add(sx + ',' + (sy - 1) + ',' + sz);
+          spawnFallingBlock(sx, sy, sz, 8);
           if(get(sx, sy + 1, sz) === 8) activeSand.add(sx + ',' + (sy + 1) + ',' + sz);
         }
       }
@@ -1305,17 +1473,23 @@ function simWorldPhysics(){
       } else if(b === NID.Lava && below === NID.Water){
         setB(fx, fy - 1, fz, 3);
       } else {
-        const dirs = [[1,0], [-1,0], [0,1], [0,-1]];
-        for(const [dx, dz] of dirs){
-          const nx = fx + dx, nz = fz + dz;
-          const adj = get(nx, fy, nz);
-          if(adj === 0){
-            setB(nx, fy, nz, b);
-            if(get(nx, fy - 1, nz) === 0) activeFluids.add(nx + ',' + fy + ',' + nz);
-          } else if(b === NID.Water && adj === NID.Lava){
-            setB(nx, fy, nz, 4);
-          } else if(b === NID.Lava && adj === NID.Water){
-            setB(nx, fy, nz, 4);
+        const curDist = fluidFlowDist.get(k) || 0;
+        const maxDist = (b === NID.Water) ? 7 : 4;
+        if(curDist < maxDist){
+          const dirs = [[1,0], [-1,0], [0,1], [0,-1]];
+          for(const [dx, dz] of dirs){
+            const nx = fx + dx, nz = fz + dz;
+            const adj = get(nx, fy, nz);
+            const nk = nx + ',' + fy + ',' + nz;
+            if(adj === 0){
+              setB(nx, fy, nz, b);
+              fluidFlowDist.set(nk, curDist + 1);
+              if(get(nx, fy - 1, nz) === 0) activeFluids.add(nk);
+            } else if(b === NID.Water && adj === NID.Lava){
+              setB(nx, fy, nz, 4);
+            } else if(b === NID.Lava && adj === NID.Water){
+              setB(nx, fy, nz, 4);
+            }
           }
         }
       }
@@ -1381,14 +1555,25 @@ else if(id==11){if(f==0){b=hx('#a67c45');if(x%8==0||y%8==0)m=.6}else{if(y>5&&y<1
 else if(id==13){if(x==0||y==0||x==15||y==15)b=hx('#5b3d14');else if(f==2&&x>6&&x<9&&y>5&&y<9)b=hx('#cccccc');else if(y%5==4)m=.75}
 else if(id==14)m=.4+.4*r;
 else if(OREC[id]){b=hx('#808080');if(hs(Math.floor(x/2)+id,Math.floor(y/2),7)<.3)b=hx(OREC[id])}
-else if(id==NID.Farmland){if(f==0){b=hx('#3d2817');if(x%3==0||y%3==0)m=.7}else{b=hx('#8a5e3b')}}
+else if(id==NID.Farmland){if(f==2||f==0){b=hx('#422a15');if(y%2==0)m=.78}else{b=hx('#8a5e3b')}}
+else if(id==NID['White Wool']||(T[id]&&T[id][0].includes('Wool'))){b=hx('#e8e8e8');const knit=((Math.floor(x/2)+Math.floor(y/2))%2===0)?.92:1.06;const th=((x%2===0)^(y%2===0))?.95:1.0;m=(.85+.25*r)*knit*th;}
+else if(id==NID['Oak Door']){b=hx('#ab7c48');if((x<=1||x>=14||y<=1||y>=14))m=.7;else if((x>=4&&x<=11)&&(y>=3&&y<=7||y>=9&&y<=13))m=.82;if(x==12&&y==7)b=hx('#222222');}
+else if(id==NID['Oak Button']){b=hx('#b8905a');if(x==0||y==0||x==15||y==15)m=.75;}
 else if(id==NID['Blast Furnace']){b=hx('#4a4a4a');if(f==2&&x>2&&x<13&&y>5&&y<13){b=y>9?hx('#ff7700'):hx('#1a1a1a');m=1}else if(f==0){b=hx('#363636')}else if((x==1||x==14)&&(y==1||y==14))b=hx('#aaaaaa')}
 else if(id==NID.Smoker){b=hx('#5c442e');if(f==0){b=((x>4&&x<11)&&(y==5||y==10))||((y>4&&y<11)&&(x==5||x==10))?hx('#8a8a8a'):hx('#262626')}else if(f==2&&x>2&&x<13&&y>6&&y<13){b=y>10?hx('#e65c00'):hx('#222222');m=1}}
 else if(id==NID['Oak Sapling']){if(x>=2&&x<=13&&y>=5&&y<=15)return hx('#3fa32b');if((x==7||x==8)&&y<=5)return hx('#6b4f2a');return null}
 else if(id==NID['Red Bed']){if(f==0){b=y>=11?hx('#f8f8f8'):hx('#b02e26')}else{b=y<4?hx('#6b4f2a'):(y>=12?hx('#f8f8f8'):hx('#b02e26'))}}
 else if(GLS.has(id)){return(x<2||y<2||x>13||y>13||(x==y&&(x<4||x>11)))?b.map(v=>v*m):null}
 else if(BRK.has(id)){if(y%4==0||(x+(y>>2)*3)%6==0)m=.55}
-else if(id==NID.Water)m=.9+.1*r;else if(id==NID.Lava)m=1.1-.4*r;
+else if(id==NID.Water)m=.9+.1*r;
+else if(id==NID.Lava){
+  const swirl = Math.sin(x * 0.7 + y * 0.5) * Math.cos(x * 0.4 - y * 0.8);
+  if(swirl > 0.35 || r < 0.12) b = hx('#ffba24');
+  else if(swirl > -0.15 || r < 0.45) b = hx('#f35b12');
+  else if(swirl > -0.55) b = hx('#d43508');
+  else b = hx('#8a1b05');
+  m = 0.95 + 0.15 * r;
+}
 else if(id>=20&&!IB.has(id))return ip(id,x,y,r);
 return[b[0]*m,b[1]*m,b[2]*m]}
 function ip(id,x,y,r){const p=P[id],c=T[id][1],ty=p?p[2]:-1,q=x+y,hd=hx(c),hw=hx('#8a6a3a'),f=a=>a.map(v=>v*(r<.25?.8:1)),stk=(q==15||q==14)&&x>=2&&x<=13;
@@ -1413,8 +1598,7 @@ function buildChunkMesh(ch){
   for(let lz = 0; lz < 16; lz++){
     for(let lx = 0; lx < 16; lx++){
       const x = wx + lx, z = wz + lz;
-      const maxY = Math.min(H - 1, (ch.tp[lx + lz * 16] || 25) + 7);
-      for(let y = 0; y <= maxY; y++){
+      for(let y = 0; y < H; y++){
         const id = ch.data[lx + lz * 16 + y * 256];
         if(!id) continue;
         if((id > 14 && id < 18) || NON_FULL.has(id)){ splLocal.push([x, y, z, id]); continue; }
@@ -1436,7 +1620,7 @@ function buildChunkMesh(ch){
             if(!isTr(nb)) continue;
           }
           const k = id * 3 + d[3];
-          const b = d[4] * light(nx, ny, nz) * v;
+          const b = (id === NID.Lava) ? 1.15 : (d[4] * light(nx, ny, nz) * v);
           const u0 = (k % 64 + 0.04) / 64, v0 = (Math.floor(k / 64) + 0.04) / 64;
           const us = 0.92 / 64;
           for(const i of [0, 1, 2, 0, 2, 3]){
@@ -1459,14 +1643,18 @@ function rebuild(){
 
   activeChunks = [];
   let totalLen = 0;
+  let meshesBuilt = 0;
   for(let cz = pcz - CH_RADIUS; cz <= pcz + CH_RADIUS; cz++){
     for(let cx = pcx - CH_RADIUS; cx <= pcx + CH_RADIUS; cx++){
       const ch = getChunk(cx, cz);
       activeChunks.push(ch);
-      if(ch.dirty || !ch.mesh){
+      if((ch.dirty || !ch.mesh) && meshesBuilt < 2){
         buildChunkMesh(ch);
+        meshesBuilt++;
+      } else if(ch.dirty || !ch.mesh){
+        dirty = true; // schedule remaining chunk on next frame to prevent stutter
       }
-      totalLen += ch.mesh.length;
+      if(ch.mesh) totalLen += ch.mesh.length;
     }
   }
 
@@ -1498,11 +1686,47 @@ function rebuild(){
 }
 function pushBox(a,cx,cy,cz,hx_,hy,hz,rot,k,r,g,b){const c=Math.cos(rot),s=Math.sin(rot);for(let f=0;f<6;f++){const sd=FD[f][4];const vs=FQ[f].map(v=>{const x=(v[0]-.5)*2*hx_,y=(v[1]-.5)*2*hy,z=(v[2]-.5)*2*hz;return[cx+x*c+z*s,cy+y,cz-x*s+z*c]});
 for(const i of[0,1,2,0,2,3]){const v=vs[i];a.push(v[0],v[1],v[2],...tuv(k,UVC[i]),r*sd,g*sd,b*sd)}}}
-function face(a,m,z0,d,s,c){const hy=z0?d[1]-.2:d[1]*.8,fz=(z0?0:-.65)-.225,t=m.type,B=(lx,ly,lz,sx,sy,sz,k,r,g,b)=>pushBox(a,m.p.x+lx*c+(fz+lz)*s,m.p.y+hy+ly,m.p.z-lx*s+(fz+lz)*c,sx,sy,sz,m.ry,k,r,g,b);
-for(const e of[-.11,.11])B(e,.05,-.01,.05,.05,.012,1,0,0,0);
-if(t=='creeper')B(0,-.08,-.01,.05,.1,.012,1,0,0,0);else if(t=='pig')B(0,-.07,-.04,.11,.075,.04,0,.9,.55,.6);else if(t=='cow')B(0,-.08,-.04,.13,.07,.04,0,.95,.8,.75);else if(t=='villager')B(0,-.06,-.05,.05,.12,.06,0,.85,.55,.45);else B(0,-.11,-.01,.1,.02,.012,1,0,0,0)}
+function face(a,m,z0,d,s,c){
+  const sc = m.isBaby ? 0.5 : 1.0;
+  const hy = (z0 ? d[1] - .2 : d[1] * .8) * sc;
+  const fz = ((z0 ? 0 : -.65) - .225) * sc;
+  const t = m.type;
+  const B=(lx,ly,lz,sx,sy,sz,k,r,g,b)=>pushBox(a,m.p.x+lx*c*sc+(fz+lz*sc)*s,m.p.y+hy+ly*sc,m.p.z-lx*s*sc+(fz+lz*sc)*c,sx*sc,sy*sc,sz*sc,m.ry,k,r,g,b);
+  for(const e of[-.11,.11])B(e,.05,-.01,.05,.05,.012,1,0,0,0);
+  if(t=='creeper')B(0,-.08,-.01,.05,.1,.012,1,0,0,0);
+  else if(t=='pig')B(0,-.07,-.04,.11,.075,.04,0,.9,.55,.6);
+  else if(t=='cow')B(0,-.08,-.04,.13,.07,.04,0,.95,.8,.75);
+  else if(t=='villager')B(0,-.06,-.05,.05,.12,.06,0,.85,.55,.45);
+  else B(0,-.11,-.01,.1,.02,.012,1,0,0,0);
+}
 const rgb=(h,b)=>hx(h).map(x=>x/255*b);
 let curMVP = null;
+function renderSignLabels(){
+  const container = document.getElementById('nametags');
+  if(!container || !playing || dead || ui || !curMVP) return;
+  const m = curMVP, w = window.innerWidth, h = window.innerHeight;
+  let html = '';
+  for(const k in signs){
+    const [sx, sy, sz] = k.split(',').map(Number);
+    const dist = Math.hypot(pl.p.x - sx, pl.p.z - sz);
+    if(dist > 14) continue;
+    const x = sx + 0.5, y = sy + 0.82, z = sz + 0.5;
+    const clipW = m[3]*x + m[7]*y + m[11]*z + m[15];
+    if(clipW <= 0.1) continue;
+    const clipX = m[0]*x + m[4]*y + m[8]*z + m[12], clipY = m[1]*x + m[5]*y + m[9]*z + m[13];
+    const ndcX = clipX / clipW, ndcY = clipY / clipW;
+    if(ndcX >= -1.1 && ndcX <= 1.1 && ndcY >= -1.1 && ndcY <= 1.1){
+      const px = (ndcX * 0.5 + 0.5) * w, py = (-ndcY * 0.5 + 0.5) * h;
+      const lines = (signs[k] || []).filter(Boolean);
+      if(lines.length){
+        const scale = Math.max(9, Math.min(13, Math.round(130 / dist)));
+        html += `<div style="position:absolute;left:${px}px;top:${py}px;transform:translate(-50%,-50%);font-family:monospace;font-size:${scale}px;color:#180c02;font-weight:bold;line-height:1.15;text-align:center;pointer-events:none;background:#c9a66b99;padding:2px 4px;border-radius:2px">${lines.join('<br>')}</div>`;
+      }
+    }
+  }
+  container.innerHTML += html;
+}
+
 function renderNametags(){
   const container = document.getElementById('nametags');
   if(!container){ return; }
@@ -1541,7 +1765,7 @@ function renderNametags(){
 
 function render(){
   gl.viewport(0,0,cv.width,cv.height);
-  const isUnderWater = get(Math.floor(pl.p.x), Math.floor(pl.p.y + 0.4), Math.floor(pl.p.z)) === NID.Water;
+  const isUnderWater = get(Math.floor(pl.p.x), Math.floor(pl.p.y + 1.62), Math.floor(pl.p.z)) === NID.Water;
   const sk = isUnderWater ? [0.08, 0.25, 0.6] : [.529*dayF+.02,.722*dayF+.02,.941*dayF+.05];
   gl.clearColor(sk[0],sk[1],sk[2],1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
@@ -1560,6 +1784,15 @@ function render(){
   if(wcount){bind(wbuf);gl.drawArrays(gl.TRIANGLES,0,wcount)}
 
   const tri=[],t=performance.now()/1000,L=(x,y,z)=>light(Math.floor(x),Math.floor(y),Math.floor(z));
+
+  // Render Thrown Eggs
+  for(const eg of thrownEggs){
+    pushBox(tri, eg.x, eg.y, eg.z, 0.06, 0.07, 0.06, 0, NID.Egg * 3, 1, 1, 1);
+  }
+  // Render Falling Blocks (Smooth 60fps falling entity cubes)
+  for(const fb of fallingBlocks){
+    pushBox(tri, fb.x, fb.y, fb.z, 0.5, 0.5, 0.5, 0, fb.id * 3, 0.95, 0.95, 0.95);
+  }
 
   // Render Mobs
   for(const m of mobs){
@@ -1592,13 +1825,13 @@ function render(){
     else if(id==NID.Lantern||id==NID['Soul Lantern']){pushBox(tri,x+.5,y+.22,z+.5,.13,.16,.13,0,id*3,b,b,b);pushBox(tri,x+.5,y+.42,z+.5,.04,.08,.04,0,0,b*.4,b*.4,b*.4)}
     else if(id==NID.Anvil){pushBox(tri,x+.5,y+.12,z+.5,.4,.12,.22,0,id*3,b,b,b);pushBox(tri,x+.5,y+.32,z+.5,.18,.08,.14,0,id*3,b,b,b);pushBox(tri,x+.5,y+.52,z+.5,.42,.12,.28,0,id*3,b,b,b)}
     else if(id==NID['Oak Button']){pushBox(tri,x+.5,y+.44,z+.5,.12,.06,.08,0,NID['Oak Planks']*3,b,b,b)}
-    else if(id==NID['Oak Door']){const op=doorOpen.has(x+','+y+','+z);pushBox(tri,op?x+.07:x+.5,y+.5,op?z+.5:z+.07,op?.07:.5,.5,op?.5:.07,0,id*3,b,b,b)}
+    else if(id==NID['Oak Door']){const op=doorOpen.has(x+','+y+','+z);pushBox(tri,op?x+.06:x+.5,y+.5,op?z+.5:z+.06,op?.06:.5,.5,op?.5:.06,0,id*3,b,b,b)}
     else if(id==NID['Oak Fence']){pushBox(tri,x+.5,y+.5,z+.5,.08,.5,.08,0,id*3,b,b,b);pushBox(tri,x+.5,y+.62,z+.5,.5,.05,.04,0,id*3,b,b,b);pushBox(tri,x+.5,y+.35,z+.5,.5,.05,.04,0,id*3,b,b,b)}
     else if(id==NID['Oak Fence Gate']){const op=doorOpen.has(x+','+y+','+z);pushBox(tri,op?x+.06:x+.5,y+.5,op?z+.5:z+.06,op?.06:.5,.45,op?.5:.06,0,id*3,b,b,b)}
     else if(id==NID.Chain){pushBox(tri,x+.5,y+.5,z+.5,.04,.5,.04,0,id*3,b,b,b)}
     else if(id==NID['Oak Sapling']){pushBox(tri,x+.5,y+.4,z+.5,.4,.4,.01,.785,id*3,b,b,b);pushBox(tri,x+.5,y+.4,z+.5,.4,.4,.01,-.785,id*3,b,b,b)}
     else if(id==NID['Glass Pane']){pushBox(tri,x+.5,y+.5,z+.5,.5,.5,.03,0,id*3,b,b,b)}
-    else if(id==NID.Farmland){pushBox(tri,x+.5,y+.468,z+.5,.5,.468,.5,0,NID.Farmland*3,b,b,b)}
+    // Farmland rendered natively in chunk mesh
     else if(id===NID['Wheat Crops']||id===NID['Carrot Crops']||id===NID['Potato Crops']||crops[x+','+y+','+z]){const cr=crops[x+','+y+','+z];const sc=cr?Math.min(1,(cr.elapsed||0)/180)*.28+.1:.25;const col=id===NID['Carrot Crops']?[b*.9,b*.5,b*.1]:id===NID['Potato Crops']?[b*.6,b*.8,b*.2]:[b*.7,b*.85,b*.3];pushBox(tri,x+.5,y+sc,z+.5,.25,sc,.02,.785,0,...col);pushBox(tri,x+.5,y+sc,z+.5,.25,sc,.02,-.785,0,...col)}
     else if(id==NID['Red Bed']){pushBox(tri,x+.5,y+.18,z+.5,.48,.18,.48,0,id*3,b,b,b);pushBox(tri,x+.5,y+.26,z+.5,.44,.08,.44,0,0,b*.9,b*.2,b*.2);pushBox(tri,x+.5,y+.30,z+.75,.38,.05,.15,0,0,b*.95,b*.95,b*.95)}
     else if(id==NID['Flower Pot']){pushBox(tri,x+.5,y+.18,z+.5,.12,.18,.12,0,id*3,b,b,b)}
@@ -1618,11 +1851,15 @@ function render(){
     const tx = q.presence.x, ty = q.presence.y, tz = q.presence.z;
     const tyaw = q.presence.r || 0, tpitch = q.presence.p || 0;
     
-    const lerpFactor = Math.min(1.0, (curDt || 0.016) * 16);
+    const lerpFactor = Math.min(1.0, (curDt || 0.016) * 18);
     q.curX += (tx - q.curX) * lerpFactor;
     q.curY += (ty - q.curY) * lerpFactor;
     q.curZ += (tz - q.curZ) * lerpFactor;
-    q.curYaw += (tyaw - q.curYaw) * lerpFactor;
+    
+    let dyaw = tyaw - q.curYaw;
+    while(dyaw < -Math.PI) dyaw += Math.PI * 2;
+    while(dyaw > Math.PI) dyaw -= Math.PI * 2;
+    q.curYaw += dyaw * lerpFactor;
     q.curPitch += (tpitch - q.curPitch) * lerpFactor;
 
     if(q.kb > 0) q.kb -= (curDt || 0.016);
@@ -1633,7 +1870,7 @@ function render(){
     const moving = Math.hypot(tx - q.curX, tz - q.curZ) > 0.02;
     q.walkAnim = (q.walkAnim || 0) + (moving ? (curDt || 0.016) * 12 : 0);
     
-    drawPlayerModel(tri, q.curX, q.curY, q.curZ, q.curYaw, q.curPitch, q.presence.sw ? 1 : 0, q.walkAnim, teamCol, q.kb > 0, !!q.presence.crouching);
+    drawPlayerModel(tri, q.curX, q.curY, q.curZ, q.curYaw, q.curPitch, q.presence.sw ? 1 : 0, q.walkAnim, teamCol, q.kb > 0, !!q.presence.crouching, q.presence.arm, q.presence.held);
   }
 
   // Render Own Player Model in 3rd person
@@ -1704,6 +1941,7 @@ function render(){
   }
 
   renderNametags();
+  renderSignLabels();
 }
 const drops=[];function spawnDrop(id,n,x,y,z,v,age,uid){
   const dropUid = uid || Math.random().toString(36).slice(2);
@@ -1909,7 +2147,8 @@ function openAnvilUI(key){
   renderUI();
 }
 function openCreativeInv(){
-  if(isMultiplayerWorld || gameMode !== 1) return;
+  const isMP = isMultiplayerWorld || !!nr || (activeWorldId === 'server_9a') || hostIsRunning;
+  if(isMP || gameMode !== 1) return;
   ui = { t: 'creative', title: 'Creative Inventory' };
   document.exitPointerLock();
   $('#ui').classList.remove('hid');
@@ -1980,7 +2219,9 @@ function closeUI(nl){if(!ui)return;
   }hov=null;if(held){addItem(held.id,held.n,held.d);held=null}if(ui.g)ui.g.forEach(s=>s&&addItem(s.id,s.n));ui=null;$('#ui').classList.add('hid');$('#held').classList.add('hid');if(!nl)cv.requestPointerLock()}
 function renderUI(){
   if(ui.t === 'creative'){ renderCreativeUI(); return; }
-  const p=$('#ui');p.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h3 style="margin:0">'+ui.title+'</h3></div>';const grid=(a,c,o)=>{const g=document.createElement('div');g.className='gr';g.style.gridTemplateColumns=`repeat(${c},46px)`;a.forEach((_,i)=>g.append(slEl(a,i,r=>clk(a,i,r,o))));return g};
+  const isMP = isMultiplayerWorld || !!nr || (activeWorldId === 'server_9a') || hostIsRunning;
+  const cBtn = (!isMP && gameMode === 1) ? '<button onclick="openCreativeInv()" style="width:auto;padding:4px 10px;font-size:11px;background:#2980b9;border-color:#1c5980">Creative Menu</button>' : '';
+  const p=$('#ui');p.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h3 style="margin:0">'+ui.title+'</h3>'+cBtn+'</div>';const grid=(a,c,o)=>{const g=document.createElement('div');g.className='gr';g.style.gridTemplateColumns=`repeat(${c},46px)`;a.forEach((_,i)=>g.append(slEl(a,i,r=>clk(a,i,r,o))));return g};
 if(ui.g){const row=document.createElement('div');row.className='row';if(ui.t=='inv')row.append(equip());row.append(grid(ui.g,ui.n),'→');const o=document.createElement('div');o.className='sl';if(ui.o){const t=T[ui.o.id];o.innerHTML=`<i style="${bg(ui.o.id)}"></i><b>${ui.o.n}</b>`}
 o.onclick=()=>{if(ui.o&&(keys.ShiftLeft||keys.ShiftRight)){for(let k=0;k<64&&ui.o&&fits(ui.o.id,ui.o.n);k++){addItem(ui.o.id,ui.o.n);ui.g.forEach((q,j)=>{if(q&&--q.n<=0)ui.g[j]=null});calc()}renderUI();return}if(ui.o&&(!held||(held.id==ui.o.id&&held.n+ui.o.n<=64))){if(held)held.n+=ui.o.n;else held={...ui.o};ui.g.forEach((s,i)=>{if(s&&--s.n<=0)ui.g[i]=null});calc();renderUI()}};row.append(o);p.append(row)}
 if(ui.f){const f=ui.f,row=document.createElement('div');row.className='row';const a=document.createElement('div');a.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px';
@@ -2058,8 +2299,8 @@ function move(e,dt,w,h){
     e.p[a]+=d;
     if(hit(e.p,w,h)){
       const canStep=og||(e===pl&&(get(Math.floor(e.p.x),Math.floor(e.p.y+0.3),Math.floor(e.p.z))===NID.Water))||(e!==pl);
-      if(e.step&&canStep&&a!="y"){
-        e.p.y+=0.85; if(!hit(e.p,w,h)) continue; e.p.y-=0.85;
+      if((e.step || e === pl)&&canStep&&a!="y"){
+        e.p.y+=0.65; if(!hit(e.p,w,h)) continue; e.p.y-=0.65;
       }
       e.p[a]-=d;
       if(a=='y'&&e.v.y<0) e.ground=true;
@@ -2096,7 +2337,7 @@ setInterval(syncMobsMultiplayer, 120);
 function popMobs(){
   const isMeshHost = hostIsRunning || (!nr) || (peersList.length === 0) || (peersList.every(p => myPeerId <= p.peer));
   if(nr && !isMeshHost) return;
-  if(mobs.length >= 100) return;
+  if(mobs.length >= 35) return;
   const nt = dayF < 0.4;
   for(let i=mobs.length-1; i>=0; i--){
     if(HOST[mobs[i].type] && dayF > 0.7) mobs.splice(i, 1);
@@ -2937,6 +3178,12 @@ async function joinMP(){
   }
   if(m) m.textContent = 'Connecting to room: ' + code + '...';
   
+  isMultiplayerWorld = true;
+  gameMode = 0;
+  flyMode = false;
+  activeWorldId = 'room_' + code;
+  loadWorldData('room_' + code + '_' + myName);
+  
   nr = new UniversalNetwork(code, false);
   nr.on('blk', d => setB(d.x, d.y, d.z, d.id, true));
   nr.on('need', () => { if(edits.size) nr.emit('edits', [...edits]).catch(()=>{}); });
@@ -3093,7 +3340,14 @@ function toggleGameMode(){
 }
 function updatePauseModeBtn(){
   const btn = document.getElementById('btn-mode-toggle');
-  if(btn) btn.remove();
+  if(btn){
+    if(isMultiplayerWorld){
+      btn.style.display = 'none';
+    } else {
+      btn.style.display = 'block';
+      btn.textContent = 'Mode: ' + (gameMode ? 'Creative' : 'Survival');
+    }
+  }
 }
 
 function renameSelectedWorld(){
@@ -3240,7 +3494,7 @@ window.addEventListener('beforeunload',()=>{
 });
 cv.addEventListener('click',()=>{if(playing&&!locked&&!ui)cv.requestPointerLock()});
 addEventListener('keydown',e=>{if(chatOn)return;if(rebind){binds[rebind]=e.code;rebind=null;try{localStorage.setItem('boba_binds',JSON.stringify(binds))}catch(e){}applyS();e.preventDefault();return}
-if(!playing)return;if(e.code==binds.persp){e.preventDefault();persp=(persp+1)%3;toast(['First person','Third person (back)','Third person (front)'][persp]);return}if((e.code==binds.chat||e.code=='Slash')&&locked&&!ui&&!dead){e.preventDefault();openChat(e.code=='Slash'?'/':'');return}if(e.ctrlKey)e.preventDefault();if(e.code==binds.drop&&!dead){if(ui){if(hov&&!e.repeat)dropAt(hov.a,hov.i,e.ctrlKey)}else if(locked)dropSel(e.ctrlKey)}if(e.code==binds.inv){if(ui)closeUI();else if(locked){openUI('inv')}}else if(e.code=='Escape'&&ui)closeUI(1);
+if(!playing)return;if(e.code==binds.persp){e.preventDefault();persp=(persp+1)%3;toast(['First person','Third person (back)','Third person (front)'][persp]);return}if((e.code==binds.chat||e.code=='Slash')&&locked&&!ui&&!dead){e.preventDefault();openChat(e.code=='Slash'?'/':'');return}if(e.ctrlKey)e.preventDefault();if(e.code==binds.drop&&!dead){if(ui){if(hov&&!e.repeat)dropAt(hov.a,hov.i,e.ctrlKey)}else if(locked)dropSel(e.ctrlKey)}if(e.code==binds.inv){if(ui)closeUI();else if(locked){if(!isMultiplayerWorld && gameMode === 1) openCreativeInv(); else openUI('inv');}}else if(e.code=='Escape'&&ui)closeUI(1);
 if(/^Digit[1-9]$/.test(e.code)){slot=+e.code[5]-1;hud()}keys[e.code]=true;if(e.code=='Space')e.preventDefault()});
 addEventListener('keyup',e=>keys[e.code]=false);window.addEventListener('blur',()=>{for(const k in keys)keys[k]=false;crouch=false;spr=false;});
 let wT=0;addEventListener('wheel',e=>{const n=performance.now();if(locked&&e.deltaY&&n-wT>70){wT=n;slot=(slot+(e.deltaY>0?1:8))%9;hud()}});
@@ -3281,6 +3535,11 @@ else if(e.button==2){
       }
     }
   }
+  if(s && s.id === NID.Egg){
+    throwEgg();
+    if(!gameMode){ if(--s.n <= 0) inv[slot] = null; }
+    hud(); return;
+  }
   if(s && FOOD[s.id]){
     if(food < 20){ SFX.eat(); food = Math.min(20, food + FOOD[s.id]); if(!gameMode){ if(--s.n <= 0) inv[slot] = null; } SFX.burp(); hud(); return; }
   }
@@ -3304,13 +3563,39 @@ else if(e.button==2){
   }
   const clickedBlock = get(r.x, r.y, r.z);
   if(clickedBlock === 17){ openSignUI(r.x + ',' + r.y + ',' + r.z); return; }
-  if(clickedBlock === NID['Oak Button']){ SFX.click(); toast('*click*'); return; }
+  if(clickedBlock === NID['Oak Button']){
+    SFX.click(); toast('*click*');
+    const dirs = [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]];
+    for(const [dx, dy, dz] of dirs){
+      const nx = r.x + dx, ny = r.y + dy, nz = r.z + dz;
+      const nb = get(nx, ny, nz);
+      if(nb === NID['Oak Door'] || nb === NID['Oak Fence Gate']){
+        const dk = nx + ',' + ny + ',' + nz;
+        const otherY = (nb === NID['Oak Door']) ? (get(nx, ny + 1, nz) === NID['Oak Door'] ? ny + 1 : (get(nx, ny - 1, nz) === NID['Oak Door'] ? ny - 1 : null)) : null;
+        doorOpen.add(dk);
+        if(otherY !== null) doorOpen.add(nx + ',' + otherY + ',' + nz);
+        dirty = true;
+        setTimeout(() => {
+          doorOpen.delete(dk);
+          if(otherY !== null) doorOpen.delete(nx + ',' + otherY + ',' + nz);
+          dirty = true;
+        }, 1500);
+      }
+    }
+    return;
+  }
   if(clickedBlock === NID['Oak Door']){
-    const dk=r.x+','+r.y+','+r.z;
-    if(doorOpen.has(dk)) doorOpen.delete(dk); else doorOpen.add(dk);
-    SFX.click(); dirty=true;
-    const cx2=Math.floor(r.x/16),cz2=Math.floor(r.z/16);
-    const ch2=chunks.get(cx2+','+cz2);if(ch2){ch2.dirty=true;ch2.mesh=null;}
+    const dk = r.x + ',' + r.y + ',' + r.z;
+    const isOp = doorOpen.has(dk);
+    const otherY = get(r.x, r.y + 1, r.z) === NID['Oak Door'] ? r.y + 1 : (get(r.x, r.y - 1, r.z) === NID['Oak Door'] ? r.y - 1 : null);
+    if(isOp){
+      doorOpen.delete(dk);
+      if(otherY !== null) doorOpen.delete(r.x + ',' + otherY + ',' + r.z);
+    } else {
+      doorOpen.add(dk);
+      if(otherY !== null) doorOpen.add(r.x + ',' + otherY + ',' + r.z);
+    }
+    SFX.click(); dirty = true;
     return;
   }
   if(clickedBlock === NID['Oak Fence Gate']){
@@ -3339,8 +3624,26 @@ else if(e.button==2){
   if(s&&s.id===NID.Bucket&&(clickedBlock===NID.Water||clickedBlock===NID.Lava)){
     setB(r.x,r.y,r.z,0);inv[slot]={id:clickedBlock===NID.Water?NID['Water Bucket']:NID['Lava Bucket'],n:1};hud();return;
   }
-  if(s&&(s.id===NID['Water Bucket']||s.id===NID['Lava Bucket'])&&r.pv){
-    const[bx,by,bz]=r.pv;setB(bx,by,bz,s.id===NID['Water Bucket']?NID.Water:NID.Lava);inv[slot]={id:NID.Bucket,n:1};hud();return;
+  if(s && (s.id === NID['Water Bucket'] || s.id === NID['Lava Bucket'])){
+    let target = r.pv;
+    if(!target && pl.v.y < -2){
+      // Emergency clutch targeting right beneath feet
+      target = [Math.floor(pl.p.x), Math.max(1, Math.floor(pl.p.y)), Math.floor(pl.p.z)];
+    }
+    if(target){
+      const [bx, by, bz] = target;
+      setB(bx, by, bz, s.id === NID['Water Bucket'] ? NID.Water : NID.Lava);
+      inv[slot] = { id: NID.Bucket, n: 1 };
+      if(s.id === NID['Water Bucket'] && pl.v.y < -2){
+        // Water Clutch: cancel fall damage immediately!
+        pl.waterClutchTime = performance.now();
+        fy = pl.p.y;
+        pl.v.y = Math.max(pl.v.y, -1.0);
+        toast('Water Clutch!');
+        SFX.splash();
+      }
+      hud(); return;
+    }
   }
   if(s&&s.id===NID.Bonemeal){
     const ck2=r.x+','+(r.y+1)+','+r.z;
@@ -3386,6 +3689,16 @@ else if(e.button==2){
     hud();
     return;
   }
+  if(s && s.id === NID['Oak Door'] && r.pv){
+    const [x, y, z] = r.pv;
+    if(y < H - 1 && get(x, y + 1, z) === 0){
+      setB(x, y, z, NID['Oak Door']);
+      setB(x, y + 1, z, NID['Oak Door']);
+      SFX.place(s.id);
+      if(!gameMode){ if(--s.n <= 0) inv[slot] = null; }
+      hud(); return;
+    }
+  }
   if(s&&isB(s.id)&&r.pv){
     const[x,y,z]=r.pv;setB(x,y,z,s.id);const bad=hit(pl.p,.3,1.8);
     if(bad){setB(x,y,z,0);}else{SFX.place(s.id);if(!gameMode){if(--s.n<=0)inv[slot]=null;}}
@@ -3399,6 +3712,43 @@ if(ft>.5){const f=Math.round(fc/ft);$('#fps span').textContent='FPS: '+f;fh.push
 if(playing){
   const curPcx = Math.floor(pl.p.x / 16), curPcz = Math.floor(pl.p.z / 16);
   if(curPcx !== lastPcx || curPcz !== lastPcz) dirty = true;
+
+  // Thrown Eggs Physics & Hatching
+  for(let ei = thrownEggs.length - 1; ei >= 0; ei--){
+    const eg = thrownEggs[ei];
+    eg.age += dt;
+    eg.vy -= 22 * dt;
+    eg.x += eg.vx * dt; eg.y += eg.vy * dt; eg.z += eg.vz * dt;
+    const eb = get(Math.floor(eg.x), Math.floor(eg.y), Math.floor(eg.z));
+    if(eb !== 0 && eb !== NID.Water && eb !== NID.Lava || eg.age > 5){
+      SFX.pop();
+      for(let k = 0; k < 6; k++) spawnDrop(-2, 1, eg.x, eg.y, eg.z);
+      if(Math.random() < 0.25){
+        mkMob('chicken', eg.x, eg.y + 0.2, eg.z, Math.random() < 0.5);
+        toast('A chicken hatched!');
+      }
+      thrownEggs.splice(ei, 1);
+    }
+  }
+
+  // Falling Blocks Physics (Sand, Gravel)
+  for(let fi = fallingBlocks.length - 1; fi >= 0; fi--){
+    const fb = fallingBlocks[fi];
+    fb.vy -= 26 * dt;
+    fb.y += fb.vy * dt;
+    const targetY = Math.floor(fb.y - 0.45);
+    const bx = Math.floor(fb.x), bz = Math.floor(fb.z);
+    const below = get(bx, targetY, bz);
+    if(targetY <= 0 || (below !== 0 && below !== NID.Water)){
+      let landY = Math.max(1, targetY + 1);
+      while(landY < H - 1 && get(bx, landY, bz) !== 0 && get(bx, landY, bz) !== NID.Water){
+        landY++;
+      }
+      setB(bx, landY, bz, fb.id);
+      fallingBlocks.splice(fi, 1);
+      if(get(bx, landY + 1, bz) === 8) activeSand.add(bx + ',' + (landY + 1) + ',' + bz);
+    }
+  }
 
   // Background chunk preloader: generates at most 1 chunk per frame ahead of player
   let preloaded = false;
@@ -3420,8 +3770,15 @@ if(playing){
     if(ce) ce.textContent = 'XYZ: ' + pl.p.x.toFixed(1) + ' / ' + pl.p.y.toFixed(1) + ' / ' + pl.p.z.toFixed(1);
   }
   atkCd-=dt;
+  const isMP = isMultiplayerWorld || !!nr || (activeWorldId === 'server_9a') || hostIsRunning;
+  if(isMP){
+    if(gameMode !== 0 || flyMode){
+      gameMode = 0;
+      flyMode = false;
+    }
+  }
 crouch = isSneakActive(); spr = false; hr = .03;
-if(gameMode&&locked&&!ui){
+if(!isMP && gameMode && locked && !ui){
   if(keys[binds.jump]){
     const jt=performance.now();
     if(jt-lastJumpTime<320&&!flyMode){ flyMode=true; toast('Flying ON'); pl.v.y=0; }
@@ -3483,12 +3840,14 @@ if(leafDecayQueue.length){
 if(locked&&!ui){const f=(keys[binds.fwd]?1:0)-(keys[binds.back]?1:0),r=(keys[binds.right]?1:0)-(keys[binds.left]?1:0);spr = f > 0 && !crouch && isSprintActive(); const sp=crouch?1.3:(spr?5.6:4.3),sn=Math.sin(pl.yaw),cs=Math.cos(pl.yaw);
 let wx=-sn*f+cs*r,wz=-cs*f-sn*r;const l=Math.hypot(wx,wz)||1;pl.v.x=wx/l*sp*(f||r?1:0)+pl.v.x*0;pl.v.z=wz/l*sp*(f||r?1:0);hr=(f||r)?(spr?.2:.07):.03;if(keys[binds.jump]&&pl.ground)pl.v.y=8.6;
 const moving=(f!==0||r!==0)&&pl.ground;if(moving){const stepInt=spr?270:370;if(now-(SFX.lastStepTime||0)>stepInt){SFX.lastStepTime=now;const ub=get(Math.floor(pl.p.x),Math.floor(pl.p.y-.2),Math.floor(pl.p.z));SFX.step(ub||1)}}}else{pl.v.x=pl.v.z=0}
-const fb=get(Math.floor(pl.p.x),Math.floor(pl.p.y+.4),Math.floor(pl.p.z));if(fb==NID.Water||fb==NID.Lava){
+const fb=get(Math.floor(pl.p.x),Math.floor(pl.p.y+.4),Math.floor(pl.p.z));
+const headB=get(Math.floor(pl.p.x),Math.floor(pl.p.y+1.62),Math.floor(pl.p.z));
+if(fb==NID.Water||fb==NID.Lava){
   if(!gameMode){
-    if(fb==NID.Water){
+    if(headB==NID.Water){
       airBubbles-=dt*0.6;
       if(airBubbles<=0){hp-=dt*2.5;airBubbles=0;}
-    } else airBubbles=maxAir;
+    } else airBubbles=Math.min(maxAir, airBubbles+dt*3);
   }
   pl.v.y=Math.max(pl.v.y-5*dt,-2.5)*.92;
   if(now-(SFX.lastSwimTime||0)>340&&(pl.v.x!=0||pl.v.z!=0)){SFX.lastSwimTime=now;SFX.swim()}
@@ -3507,7 +3866,26 @@ const fb=get(Math.floor(pl.p.x),Math.floor(pl.p.y+.4),Math.floor(pl.p.z));if(fb=
   }
   fy=pl.p.y;
   if(fb==NID.Lava&&!gameMode){hp-=dt*4;SFX.hit()}
-}else{if(!flyMode)pl.v.y-=28*dt;airBubbles=Math.min(maxAir,airBubbles+dt*3);}move(pl,dt,.3,1.8);if(pl.ground){const fd=fy-pl.p.y;if(fd>3&&!gameMode){hp-=Math.floor(fd-3);SFX.fall();SFX.hit()}fy=pl.p.y}else fy=Math.max(fy,pl.p.y);if(pl.p.y<-10){pl.p.copy(spawnPt());fy=pl.p.y;if(!gameMode){hp-=4;SFX.hit()}}
+}else{if(!flyMode)pl.v.y-=28*dt;airBubbles=Math.min(maxAir,airBubbles+dt*3);}move(pl,dt,.3,1.8);if(pl.ground){
+  const fd = fy - pl.p.y;
+  const now = performance.now();
+  const py = Math.floor(pl.p.y);
+  const inWater = fb === NID.Water || headB === NID.Water ||
+                  get(Math.floor(pl.p.x), py, Math.floor(pl.p.z)) === NID.Water ||
+                  get(Math.floor(pl.p.x), py - 1, Math.floor(pl.p.z)) === NID.Water ||
+                  get(Math.floor(pl.p.x), Math.floor(pl.p.y + 0.1), Math.floor(pl.p.z)) === NID.Water;
+  const isClutched = pl.waterClutchTime && (now - pl.waterClutchTime < 1500);
+  if(inWater || isClutched){
+    fy = pl.p.y; // Zero fall damage!
+  } else if(fd > 3 && !gameMode){
+    hp -= Math.floor(fd - 3);
+    SFX.fall();
+    SFX.hit();
+  }
+  fy = pl.p.y;
+} else {
+  fy = Math.max(fy, pl.p.y);
+}if(pl.p.y<-10){pl.p.copy(spawnPt());fy=pl.p.y;if(!gameMode){hp-=4;SFX.hit()}}
 tod+=dt;{const q=tod%480;dayF=q<300?1:q<340?1-(q-300)/40:q<440?0:(q-440)/40}
 {const ty=pl.p.y+(crouch?1.27:1.62);if(ey==null||Math.abs(ty-ey)>1.2)ey=ty;else ey+=(ty-ey)*Math.min(1,dt*25);cam.position.set(pl.p.x,ey,pl.p.z);camView()}
 const r=locked&&!ui?ray(5):{};if(r.x!=null){sel.visible=true;sel.position.set(r.x+.5,r.y+.5,r.z+.5);sel.blockId=get(r.x,r.y,r.z);}else sel.visible=false;hand.classList.toggle('mn',!!(mining&&locked&&r.x!=null));hand.style.bottom=(-30+(hr>.05?Math.abs(Math.sin(tod*9))*6:0))+'px';cam.fov+=((S.fov+(spr?10:0))-cam.fov)*Math.min(1,dt*10);
@@ -3564,6 +3942,28 @@ for(const k in furn){
 }
 updRemote()}
 render()}
-setInterval(()=>{if(!playing)return;hud();if(hp<=0&&!dead&&!gameMode)die();else if(!dead&&!gameMode){fs+=hr;if(fs>=25){fs=0;if(food>0)food--;else hp-=1}if(food>=18&&hp<20)hp=Math.min(20,hp+.1)}if(gameMode){hp=20;food=20;}popMobs();const isSw = hand.classList.contains("sw"); if(nr)nr.presence({x:+pl.p.x.toFixed(2),y:+pl.p.y.toFixed(2),z:+pl.p.z.toFixed(2),r:+pl.yaw.toFixed(2),p:+pl.pitch.toFixed(2),sw:isSw,n:myName,ip:myPublicIp,crouching:crouch}).catch(()=>{})},1000/5*1);
+setInterval(()=>{
+  if(!playing) return;
+  hud();
+  if(hp<=0&&!dead&&!gameMode) die();
+  else if(!dead&&!gameMode){
+    fs+=hr;if(fs>=25){fs=0;if(food>0)food--;else hp-=1}
+    if(food>=18&&hp<20)hp=Math.min(20,hp+.1);
+  }
+  if(gameMode){hp=20;food=20;}
+  popMobs();
+}, 200);
+
+// 20 Hz Multiplayer Presence Broadcast (Smooth interpolation & worn armor / held items)
+setInterval(()=>{
+  if(!playing || !nr) return;
+  const isSw = hand.classList.contains("sw") || swingTimer > 0;
+  nr.presence({
+    x: +pl.p.x.toFixed(2), y: +pl.p.y.toFixed(2), z: +pl.p.z.toFixed(2),
+    r: +pl.yaw.toFixed(2), p: +pl.pitch.toFixed(2),
+    sw: isSw, n: myName, ip: myPublicIp, crouching: crouch,
+    arm: arm.map(a => a ? a.id : 0), held: cur() ? cur().id : 0
+  }).catch(()=>{});
+}, 50);
 applyS();requestAnimationFrame(frame);
 </script></body></html>
