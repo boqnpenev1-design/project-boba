@@ -1637,7 +1637,7 @@ function buildChunkMesh(ch){
   ch.dirty = false;
 }
 
-function rebuild(){
+function rebuild(fullSync){
   const pcx = Math.floor(pl.p.x / 16), pcz = Math.floor(pl.p.z / 16);
   lastPcx = pcx; lastPcz = pcz;
 
@@ -1648,7 +1648,7 @@ function rebuild(){
     for(let cx = pcx - CH_RADIUS; cx <= pcx + CH_RADIUS; cx++){
       const ch = getChunk(cx, cz);
       activeChunks.push(ch);
-      if((ch.dirty || !ch.mesh) && meshesBuilt < 2){
+      if((ch.dirty || !ch.mesh) && (fullSync || !playing || meshesBuilt < 3)){
         buildChunkMesh(ch);
         meshesBuilt++;
       } else if(ch.dirty || !ch.mesh){
@@ -1672,9 +1672,11 @@ function rebuild(){
   let offset = 0;
   for(let i = 0; i < activeChunks.length; i++){
     const ch = activeChunks[i];
-    combined.set(ch.mesh, offset);
-    offset += ch.mesh.length;
-    if(ch.spl && ch.spl.length){
+    if(ch && ch.mesh && ch.mesh.length){
+      combined.set(ch.mesh, offset);
+      offset += ch.mesh.length;
+    }
+    if(ch && ch.spl && ch.spl.length){
       for(let j = 0; j < ch.spl.length; j++) spl.push(ch.spl[j]);
     }
   }
@@ -3470,7 +3472,7 @@ function startGame(){
       fy = pl.p.y;
     }
     gen();
-    rebuild();
+    rebuild(true);
     for(let i=0;i<24;i++)popMobs();
     playing=true;
     applyS();
