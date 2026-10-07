@@ -1227,7 +1227,7 @@ let activeChunks = [];
 let lastPcx = 999999, lastPcz = 999999;
 const spawnedVillages = new Set();
 let tp = new Int16Array(16 * 16), edits = new Map(), dirty = true, playing = false, locked = false, ui = null, held = null, rebind = null, hov = null, nr = null, peersList = [];
-const arm=[null,null,null,null];let dg=null,xpc=0,lv=0,spr=false,crouch=false,hr=.03;const DEF=()=>arm.reduce((a,q)=>a+(q&&AR[q.id]?AR[q.id][1]:0),0),xpNeed=l=>l<16?2*l+7:l<31?5*l-38:9*l-158,fits=(id,n)=>{let f=0;for(const q of inv)if(!q)f+=64;else if(q.id==id&&!P[id])f+=64-q.n;return f>=n};function addXp(n){xpc+=n;while(xpc>=xpNeed(lv)){xpc-=xpNeed(lv);lv++}}
+const arm=[null,null,null,null];let dg=null,xpc=0,lv=0; let xpLvl = 0; Object.defineProperty(window, 'xpLvl', { get: () => lv, set: v => { lv = v; } });spr=false,crouch=false,hr=.03;const DEF=()=>arm.reduce((a,q)=>a+(q&&AR[q.id]?AR[q.id][1]:0),0),xpNeed=l=>l<16?2*l+7:l<31?5*l-38:9*l-158,fits=(id,n)=>{let f=0;for(const q of inv)if(!q)f+=64;else if(q.id==id&&!P[id])f+=64-q.n;return f>=n};function addXp(n){xpc+=n;while(xpc>=xpNeed(lv)){xpc-=xpNeed(lv);lv++}}
 const inv=Array(36).fill(null),chests={},furn={};let hp=20;
 
 function getChunk(cx, cz){
@@ -1726,7 +1726,7 @@ function simWorldPhysics(){
   }
   // Fluid Flow (Strict horizontal limit: 7 for water, 4 for lava, infinite downward)
   if(activeFluids.size > 0){
-    const fluidBatch = Array.from(activeFluids).slice(0, 25);
+    const fluidBatch = Array.from(activeFluids).slice(0, 6);
     for(const k of fluidBatch){
       activeFluids.delete(k);
       const [fx, fy, fz] = k.split(',').map(Number);
@@ -1791,7 +1791,7 @@ function simWorldPhysics(){
     }
   }
 }
-setInterval(simWorldPhysics, 80);
+setInterval(simWorldPhysics, 240);
 
 // Global light read & Point-light system
 function registerLight(x, y, z, pwr=10){
@@ -1844,7 +1844,7 @@ else if(id==2){if(r<.12)m=.6}
 else if(id==3||id==9||id==10){b=hx('#808080');if(id>8&&hs(Math.floor(x/2)+id,Math.floor(y/2),7)<.3)b=hx(id==9?'#222222':'#d8a37a')}
 else if(id==4||id==12){b=hx('#707070');if(y%4==0||(x+(y>>2)*3)%6==0)m=.55;if(id==12&&f==2&&x>3&&x<12&&y>5&&y<13){b=y>10?hx('#d26a1c'):hx('#202020');m=1}}
 else if(id==5){if(f<2){const d=Math.max(Math.abs(x-7.5),Math.abs(y-7.5));b=Math.floor(d)%3==0?hx('#8d6b3a'):hx('#b99a62')}else{b=hx('#6b4f2a');if(x%4==0)m=.7}}
-else if(id==6||(id>14&&id<18)){if(y%4==3)m=.65}
+else if(id==6){if(y%4==3)m=.65}
 else if(id==7){if(r<.25)m=.55}
 else if(id==11){if(f==0){b=hx('#a67c45');if(x%8==0||y%8==0)m=.6}else{if(y>5&&y<10)b=hx('#b8905a');if(y==0||y==15)m=.6}}
 else if(id==13){if(x==0||y==0||x==15||y==15)b=hx('#5b3d14');else if(f==2&&x>6&&x<9&&y>5&&y<9)b=hx('#cccccc');else if(y%5==4)m=.75}
@@ -2339,19 +2339,27 @@ function render(){
     else if(id==NID.Anvil){pushBox(tri,x+.5,y+.12,z+.5,.4,.12,.22,0,id*3,b,b,b);pushBox(tri,x+.5,y+.32,z+.5,.18,.08,.14,0,id*3,b,b,b);pushBox(tri,x+.5,y+.52,z+.5,.42,.12,.28,0,id*3,b,b,b)}
     else if(id==NID['Oak Button']){pushBox(tri,x+.5,y+.44,z+.5,.12,.06,.08,0,NID['Oak Planks']*3,b,b,b)}
     else if(id==15){
-      // Multidirectional Stairs
+      // Multidirectional Stairs: lower slab + offset upper step
       const facing = blockFacing.get(x + ',' + y + ',' + z) || 0;
-      const rot = facing * (Math.PI / 2);
       pushBox(tri, x + .5, y + .25, z + .5, .5, .25, .5, 0, 18, b, b, b);
-      pushBox(tri, x + .5, y + .75, z + .5, .5, .25, .25, rot, 18, b, b, b);
+      if(facing === 0){ // Facing South (+Z)
+        pushBox(tri, x + .5, y + .75, z + .75, .5, .25, .25, 0, 18, b, b, b);
+      } else if(facing === 1){ // Facing West (-X)
+        pushBox(tri, x + .25, y + .75, z + .5, .25, .25, .5, 0, 18, b, b, b);
+      } else if(facing === 2){ // Facing North (-Z)
+        pushBox(tri, x + .5, y + .75, z + .25, .5, .25, .25, 0, 18, b, b, b);
+      } else { // Facing East (+X)
+        pushBox(tri, x + .75, y + .75, z + .5, .25, .25, .5, 0, 18, b, b, b);
+      }
     }
     else if(id==NID['Oak Door']){const op=doorOpen.has(x+','+y+','+z);pushBox(tri,op?x+.06:x+.5,y+.5,op?z+.5:z+.06,op?.06:.5,.5,op?.5:.06,0,id*3,b,b,b)}
     else if(id==NID['Oak Fence']){pushBox(tri,x+.5,y+.5,z+.5,.08,.5,.08,0,id*3,b,b,b);pushBox(tri,x+.5,y+.62,z+.5,.5,.05,.04,0,id*3,b,b,b);pushBox(tri,x+.5,y+.35,z+.5,.5,.05,.04,0,id*3,b,b,b)}
     else if(id==NID['Oak Fence Gate']){
       const facing = blockFacing.get(x + ',' + y + ',' + z) || 0;
-      const rot = (facing % 2 === 1) ? (Math.PI / 2) : 0;
-      const op=doorOpen.has(x+','+y+','+z);
-      pushBox(tri,op?x+.06:x+.5,y+.5,op?z+.5:z+.06,op?.06:.5,.45,op?.5:.06,rot,id*3,b,b,b)
+      // Wide face faces player when placed (spans perpendicular to view vector)
+      const rot = (facing === 1 || facing === 2) ? (Math.PI / 2) : 0;
+      const op = doorOpen.has(x + ',' + y + ',' + z);
+      pushBox(tri, op ? x + .06 : x + .5, y + .5, op ? z + .5 : z + .06, op ? .06 : .5, .45, op ? .5 : .06, rot, id * 3, b, b, b);
     }
     else if(id==NID.Chain){pushBox(tri,x+.5,y+.5,z+.5,.04,.5,.04,0,id*3,b,b,b)}
     else if(id==NID['Oak Sapling']){pushBox(tri,x+.5,y+.4,z+.5,.4,.4,.01,.785,id*3,b,b,b);pushBox(tri,x+.5,y+.4,z+.5,.4,.4,.01,-.785,id*3,b,b,b)}
@@ -2509,11 +2517,11 @@ function setB(x,y,z,id,net){
   ch.data[lx + lz * 16 + y * 256] = id;
   edits.set(x + ',' + y + ',' + z, id);
   ch.dirty = true;
-  ch.mesh = null;
-  if(lx === 0){ const nb = chunks.get((cx-1)+','+cz); if(nb){ nb.dirty = true; nb.mesh = null; } }
-  if(lx === 15){ const nb = chunks.get((cx+1)+','+cz); if(nb){ nb.dirty = true; nb.mesh = null; } }
-  if(lz === 0){ const nb = chunks.get(cx+','+(cz-1)); if(nb){ nb.dirty = true; nb.mesh = null; } }
-  if(lz === 15){ const nb = chunks.get(cx+','+(cz+1)); if(nb){ nb.dirty = true; nb.mesh = null; } }
+  // NEVER set ch.mesh to null! Existing mesh stays visible while rebuild is queued
+  if(lx === 0){ const nb = chunks.get((cx-1)+','+cz); if(nb){ nb.dirty = true; } }
+  if(lx === 15){ const nb = chunks.get((cx+1)+','+cz); if(nb){ nb.dirty = true; } }
+  if(lz === 0){ const nb = chunks.get(cx+','+(cz-1)); if(nb){ nb.dirty = true; } }
+  if(lz === 15){ const nb = chunks.get(cx+','+(cz+1)); if(nb){ nb.dirty = true; } }
   dirty = true;
   if(LIGHT_EMIT.has(id)) registerLight(x, y, z, id === NID.Lava ? 12 : 9);
   else if(id === 0) unregisterLight(x, y, z);
@@ -3012,11 +3020,15 @@ function popMobs(){
   if(mobs.length >= 35) return;
   const nt = dayF < 0.4;
   for(let i=mobs.length-1; i>=0; i--){
-    if(HOST[mobs[i].type] && dayF > 0.7) mobs.splice(i, 1);
+    if(HOST[mobs[i].type] && dayF > 0.7){
+  const topY = getTop(Math.floor(mobs[i].p.x), Math.floor(mobs[i].p.z));
+  const isUnderground = mobs[i].p.y < topY - 1;
+  if(!isUnderground) mobs.splice(i, 1); // Only surface mobs exposed to sun despawn!
+}
   }
   const passiveList = [['pig', 8], ['cow', 8], ['sheep', 8], ['chicken', 8]];
   const hostileList = [['zombie', 8], ['skeleton', 6], ['creeper', 6], ['spider', 6]];
-  const spawnTypes = nt ? [...passiveList, ...hostileList] : passiveList;
+  const spawnTypes = [...passiveList, ...hostileList];
   for(const [t, n] of spawnTypes){
     const count = mobs.filter(m => m.type === t).length;
     if(count < n && mobs.length < 100){
@@ -3109,18 +3121,19 @@ function updMobs(dt){
     if(m.kb > 0) m.kb -= dt;
     else { m.v.x = Math.sin(m.dir) * sp; m.v.z = Math.cos(m.dir) * sp; }
     
-    // Water buoyancy & pathfind to dry land
+    // Water buoyancy, high jump, and scramble to dry land
     const inW = get(Math.floor(m.p.x), Math.floor(m.p.y + 0.3), Math.floor(m.p.z)) === NID.Water;
     if(inW){
-      m.v.y = Math.min(4.8, m.v.y + 22 * dt);
+      m.v.y = Math.min(5.6, m.v.y + 26 * dt);
       m.ground = true;
       const dirs = [[1,0], [-1,0], [0,1], [0,-1]];
       for(const [cdx, cdz] of dirs){
         const landB = get(Math.floor(m.p.x + cdx), Math.floor(m.p.y + 0.5), Math.floor(m.p.z + cdz));
         if(landB && landB !== NID.Water && landB !== NID.Lava){
           m.dir = Math.atan2(cdx, cdz);
-          m.v.x += cdx * 4 * dt;
-          m.v.z += cdz * 4 * dt;
+          m.v.x = cdx * 2.8;
+          m.v.z = cdz * 2.8;
+          m.v.y = 7.2; // Powerful hop out of water onto land!
           break;
         }
       }
@@ -3132,7 +3145,9 @@ function updMobs(dt){
     move(m, dt, m.w, m.h);
     if(m.blocked){
       m.tm = 0;
-      if(m.ground || inW) m.v.y = 7.5;
+      if(m.ground || inW){
+        m.v.y = 6.8; // Hop over 1-block obstacles and banks!
+      }
     }
     
     if(HOST[m.type] && dist < 1.4 && Math.abs(pl.p.y - m.p.y) < 1.5 && m.atk <= 0){
@@ -4431,39 +4446,51 @@ else if(e.button==2){
   if(s&&P[s.id]&&P[s.id][2]===4&&(clickedBlock===1||clickedBlock===2)){
     setB(r.x,r.y,r.z,NID.Farmland);SFX.dig(2);if(!gameMode&&P[s.id])use(s,1);return;
   }
-  if(s&&s.id===NID.Bucket&&(clickedBlock===NID.Water||clickedBlock===NID.Lava)){
+  if(s && s.id === NID.Bucket && (clickedBlock === NID.Water || clickedBlock === NID.Lava)){
     const sk = r.x + ',' + r.y + ',' + r.z;
-    if(!fluidSources.has(sk)){
-      toast('Can only scoop source blocks!');
-      return;
+    const isWater = (clickedBlock === NID.Water);
+    // Natural sea or lake water (at/below sea level 22) or surrounded by water regenerates infinitely!
+    const isLakeOrSea = isWater && (r.y <= 22);
+    let adjWaterCount = 0;
+    const dirs = [[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]];
+    for(const [dx, dy, dz] of dirs){
+      if(get(r.x + dx, r.y, r.z + dz) === NID.Water) adjWaterCount++;
     }
-    fluidSources.delete(sk);
-    fluidFlowDist.delete(sk);
-    setB(r.x,r.y,r.z,0);
-    // Dissipate connected flowing fluid that lost source
-    const checkQueue = [sk];
-    const visited = new Set([sk]);
-    while(checkQueue.length > 0){
-      const curr = checkQueue.shift();
-      const [cx, cy, cz] = curr.split(',').map(Number);
-      const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
-      for(const [dx,dy,dz] of dirs){
-        const nx = cx+dx, ny = cy+dy, nz = cz+dz;
-        const nk = nx + ',' + ny + ',' + nz;
-        if(!visited.has(nk)){
-          visited.add(nk);
-          const nb = get(nx, ny, nz);
-          if((nb === NID.Water || nb === NID.Lava) && !fluidSources.has(nk)){
-            setB(nx, ny, nz, 0);
-            fluidFlowDist.delete(nk);
-            checkQueue.push(nk);
+    const isInfiniteWater = isWater && (isLakeOrSea || adjWaterCount >= 2);
+
+    if(!isInfiniteWater){
+      fluidSources.delete(sk);
+      fluidFlowDist.delete(sk);
+      setB(r.x, r.y, r.z, 0);
+      // Only dissipate artificially placed flowing fluid on dry land (y > 22)
+      if(r.y > 22){
+        const checkQueue = [sk];
+        const visited = new Set([sk]);
+        while(checkQueue.length > 0 && checkQueue.length < 50){
+          const curr = checkQueue.shift();
+          const [cx, cy, cz] = curr.split(',').map(Number);
+          for(const [dx,dy,dz] of dirs){
+            const nx = cx+dx, ny = cy+dy, nz = cz+dz;
+            const nk = nx + ',' + ny + ',' + nz;
+            if(!visited.has(nk)){
+              visited.add(nk);
+              const nb = get(nx, ny, nz);
+              if((nb === NID.Water || nb === NID.Lava) && !fluidSources.has(nk) && ny > 22){
+                setB(nx, ny, nz, 0);
+                fluidFlowDist.delete(nk);
+                checkQueue.push(nk);
+              }
+            }
           }
         }
       }
+    } else {
+      // Infinite water source: lake never drains, stays full!
+      setB(r.x, r.y, r.z, NID.Water);
     }
-    inv[slot]={id:clickedBlock===NID.Water?NID['Water Bucket']:NID['Lava Bucket'],n:1};
+    inv[slot] = { id: isWater ? NID['Water Bucket'] : NID['Lava Bucket'], n: 1 };
     SFX.splash();
-    hud();return;
+    hud(); return;
   }
   if(s && (s.id === NID['Water Bucket'] || s.id === NID['Lava Bucket'])){
     let target = r.pv;
@@ -4500,7 +4527,7 @@ else if(e.button==2){
     if(crops[cropKey] || [NID['Wheat Crops'], NID['Carrot Crops'], NID['Potato Crops']].includes(cb)){
       if(!crops[cropKey]) crops[cropKey] = { type: NID.Seeds, elapsed: 0 };
       crops[cropKey].elapsed = 360;
-      toast('Crop grew instantly! ðŸŒ¾');
+      // crop grew instantly
       SFX.pop();
       for(let k=0; k<6; k++) spawnDrop(-2, 1, cx + .5 + (Math.random()-.5)*.4, cy + .7, cz + .5 + (Math.random()-.5)*.4);
       if(!gameMode){ if(--s.n <= 0) inv[slot] = null; }
@@ -4669,23 +4696,9 @@ if(chickenEggTimer>60){
   mobs.forEach(m=>{if(m.type==='chicken'&&Math.random()<.5)spawnDrop(NID.Egg,1,m.p.x,m.p.y+.5,m.p.z);});
 }
 for(const ck in crops){
-  const c2=crops[ck];c2.elapsed=(c2.elapsed||0)+dt;
-  if(c2.elapsed>=180){
-    const[cx3,cy3,cz3]=ck.split(',').map(Number);
-    const cur2=get(cx3,cy3,cz3);
-    if(cur2===NID['Wheat Crops']||cur2===NID['Carrot Crops']||cur2===NID['Potato Crops']||cur2===NID.Seeds){
-      if(cur2===NID['Wheat Crops']||cur2===NID.Seeds){
-        spawnDrop(NID.Wheat,rnd(1,2),cx3+.5,cy3+.5,cz3+.5);
-        spawnDrop(NID.Seeds,rnd(1,3),cx3+.5,cy3+.7,cz3+.5);
-      } else if(cur2===NID['Carrot Crops']){
-        spawnDrop(NID.Carrot,rnd(1,3),cx3+.5,cy3+.5,cz3+.5);
-      } else if(cur2===NID['Potato Crops']){
-        spawnDrop(NID.Potato,rnd(1,3),cx3+.5,cy3+.5,cz3+.5);
-      }
-      setB(cx3,cy3,cz3,0);
-    }
-    delete crops[ck];
-  }
+  const c2 = crops[ck];
+  // Mature crops stay fully grown (do NOT self-destruct)
+  c2.elapsed = Math.min(180, (c2.elapsed || 0) + dt);
 }
 for(const sk in saplings){
   const sp2=saplings[sk];
@@ -4846,7 +4859,12 @@ setInterval(()=>{
 setInterval(() => {
   if(!playing) return;
   const now = performance.now();
-  for(const sp of activeSpawners){
+  for(let si = activeSpawners.length - 1; si >= 0; si--){
+    const sp = activeSpawners[si];
+    if(get(sp.x, sp.y, sp.z) !== NID['Mob Spawner']){
+      activeSpawners.splice(si, 1);
+      continue;
+    }
     if(now - sp.last < 3800) continue;
     const dist = Math.hypot(pl.p.x - sp.x, pl.p.z - sp.z);
     if(dist < 16 && Math.abs(pl.p.y - sp.y) < 10){
@@ -4856,7 +4874,8 @@ setInterval(() => {
         const ox = (Math.random() - 0.5) * 3;
         const oz = (Math.random() - 0.5) * 3;
         mkMob(sp.mob, sp.x + ox, sp.y, sp.z + oz);
-        for(let k = 0; k < 6; k++) spawnDrop(-2, 1, sp.x + 0.5, sp.y + 0.7, sp.z + 0.5);
+        // Only spawn smoke flame particles, NO passive XP drop!
+        for(let k = 0; k < 4; k++) spawnDrop(0, 1, sp.x + 0.5, sp.y + 0.7, sp.z + 0.5);
       }
     }
   }
