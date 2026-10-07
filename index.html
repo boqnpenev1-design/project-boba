@@ -1,4 +1,4 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Boba</title>
+﻿<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Boba</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script><style>
@@ -299,6 +299,9 @@ mkB('Oak Fence','#b8905a',2,0,1);
 mkB('Oak Fence Gate','#b8905a',2,0,1);NS[NID['Oak Fence Gate']]=1;
 mkB('Farmland','#4e341c',0.6,0,0);
 mkB('Red Bed','#b02e26',0.2,0,1);
+mkB('Bookshelf','#a07a46',1.5,0,1);
+mkB('Mob Spawner','#202020',5,0,1);
+rcp('Bookshelf', 1, 'ppp/bbb/ppp', { p: 'Oak Planks', b: 'Book' });
 mkB('Oak Slab','#b8905a',1.0,0,1);
 mkB('Cobblestone Slab','#6e6e6e',1.5,4,1);
 mkB('Stone Brick Slab','#7a7a7a',1.5,4,1);
@@ -308,6 +311,8 @@ rcp('Stone Brick Slab', 6, 'sss', { s: 'Stone Bricks' });
 mkB('Wheat Crops','#7bb04a',0.1,0,1);mkB('Carrot Crops','#ee8a1c',0.1,0,1);mkB('Potato Crops','#c9a35c',0.1,0,1);
 NS[NID['Wheat Crops']]=NS[NID['Carrot Crops']]=NS[NID['Potato Crops']]=1;
 const NON_FULL=new Set([NID.Torch,NID['Soul Torch'],NID.Lantern,NID['Soul Lantern'],NID.Anvil,NID['Oak Button'],NID.Chain,NID['Flower Pot'],NID.Ladder,NID['Oak Door'],NID['Oak Fence'],NID['Oak Fence Gate'],NID['Oak Sapling'],NID['Glass Pane'],NID['Red Bed'],NID['Oak Slab'],NID['Cobblestone Slab'],NID['Stone Brick Slab'],NID['Wheat Crops'],NID['Carrot Crops'],NID['Potato Crops']]);
+NON_FULL.add(NID['Enchanting Table']);
+NON_FULL.add(NID['Mob Spawner']);
 TR.add(NID['Oak Sapling']);TR.add(NID['Glass Pane']);TR.add(NID.Glass);TR.add(NID['Oak Door']);TR.add(NID['Oak Fence Gate']);TR.add(NID['Oak Button']);TR.add(NID['Wheat Crops']);TR.add(NID['Carrot Crops']);TR.add(NID['Potato Crops']);TR.add(NID['Red Bed']);TR.add(NID['Oak Slab']);TR.add(NID['Cobblestone Slab']);TR.add(NID['Stone Brick Slab']);TR.add(NID.Farmland);
 const LIGHT_EMIT=new Set([NID.Torch,NID['Soul Torch'],NID.Lantern,NID['Soul Lantern'],NID.Campfire,NID['Soul Campfire'],NID.Lava]);
 const activeLights={};
@@ -350,6 +355,149 @@ function openSignUI(key){
   if(l1) l1.focus();
 }
 
+// ===== Enchanting Table System (Java Edition Formulas & Bookshelf Mechanics) =====
+function countBookshelves(tx, ty, tz){
+  let count = 0;
+  for(let dy = 0; dy <= 1; dy++){
+    for(let dz = -2; dz <= 2; dz++){
+      for(let dx = -2; dx <= 2; dx++){
+        if(Math.abs(dx) !== 2 && Math.abs(dz) !== 2) continue; // distance 2 outer ring
+        if(get(tx + dx, ty + dy, tz + dz) === NID.Bookshelf){
+          const gapX = Math.round(dx / 2);
+          const gapZ = Math.round(dz / 2);
+          const gapBlock = get(tx + gapX, ty + dy, tz + gapZ);
+          if(gapBlock === 0){ // clear air gap required
+            count++;
+            if(count >= 15) return 15;
+          }
+        }
+      }
+    }
+  }
+  return count;
+}
+
+const ENCHANT_DEFS = {
+  sharpness: { name: 'Sharpness', max: 5, weight: 10, types: ['Sword', 'Axe', 'Book'] },
+  smite: { name: 'Smite', max: 5, weight: 5, types: ['Sword', 'Axe', 'Book'] },
+  fire_aspect: { name: 'Fire Aspect', max: 2, weight: 2, types: ['Sword', 'Book'] },
+  looting: { name: 'Looting', max: 3, weight: 2, types: ['Sword', 'Book'] },
+  efficiency: { name: 'Efficiency', max: 5, weight: 10, types: ['Pickaxe', 'Axe', 'Shovel', 'Hoe', 'Book'] },
+  unbreaking: { name: 'Unbreaking', max: 3, weight: 5, types: ['Sword', 'Pickaxe', 'Axe', 'Shovel', 'Hoe', 'Bow', 'Helmet', 'Chestplate', 'Leggings', 'Boots', 'Book'] },
+  fortune: { name: 'Fortune', max: 3, weight: 2, types: ['Pickaxe', 'Axe', 'Shovel', 'Book'] },
+  silk_touch: { name: 'Silk Touch', max: 1, weight: 1, types: ['Pickaxe', 'Axe', 'Shovel', 'Book'] },
+  power: { name: 'Power', max: 5, weight: 10, types: ['Bow', 'Book'] },
+  flame: { name: 'Flame', max: 1, weight: 2, types: ['Bow', 'Book'] },
+  protection: { name: 'Protection', max: 4, weight: 10, types: ['Helmet', 'Chestplate', 'Leggings', 'Boots', 'Book'] }
+};
+
+function getEnchantability(itemId){
+  if(!itemId || !T[itemId]) return 1;
+  const n = T[itemId][0];
+  if(n.includes('Golden')) return 25;
+  if(n.includes('Wooden')) return 15;
+  if(n.includes('Iron')) return 14;
+  if(n.includes('Diamond')) return 10;
+  if(n.includes('Stone')) return 5;
+  if(n.includes('Leather')) return 15;
+  return 1;
+}
+
+function calcEnchantOptions(item, bsCount){
+  if(!item) return [];
+  const bs = Math.min(15, bsCount);
+  let seed = (playerXpSeed ^ (item.id * 37) ^ (bs * 101)) >>> 0;
+  const prng = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return (seed >>> 16) / 65536; };
+  const randInt = (m) => Math.floor(prng() * m);
+
+  const xpBase = 1 + randInt(7) + Math.floor(bs / 2) + randInt(bs + 1);
+  const slot1Req = Math.max(1, Math.floor(xpBase / 3));
+  const slot2Req = Math.floor((2 * xpBase) / 3) + 1;
+  const slot3Req = Math.max(xpBase, 2 * bs);
+
+  const reqs = [slot1Req, slot2Req, slot3Req];
+  const costs = [1, 2, 3];
+
+  const itemType = T[item.id] ? T[item.id][0] : '';
+  const enchAbility = getEnchantability(item.id);
+
+  const opts = [];
+  for(let s = 0; s < 3; s++){
+    const req = reqs[s];
+    const power = req + randInt(Math.floor(enchAbility / 4) + 1) + 1;
+    const cand = [];
+    for(const k in ENCHANT_DEFS){
+      const def = ENCHANT_DEFS[k];
+      const match = def.types.some(t => itemType.includes(t)) || itemType === 'Book';
+      if(match){
+        for(let w = 0; w < def.weight; w++) cand.push(k);
+      }
+    }
+    const chosenKey = cand.length ? cand[randInt(cand.length)] : 'unbreaking';
+    const def = ENCHANT_DEFS[chosenKey];
+    const lvl = Math.min(def.max, Math.max(1, Math.floor((power / 30) * def.max) + 1));
+    const roman = ['', 'I', 'II', 'III', 'IV', 'V'][lvl] || lvl;
+
+    opts.push({
+      slot: s,
+      reqLvl: req,
+      costLvl: costs[s],
+      costLapis: costs[s],
+      enchKey: chosenKey,
+      enchName: def.name + ' ' + roman,
+      level: lvl
+    });
+  }
+  return opts;
+}
+
+function updateEnchantOptions(){
+  if(!ui || ui.t !== 'enchant') return;
+  ui.options = calcEnchantOptions(ui.s[0], ui.bookshelves);
+}
+
+function openEnchantUI(x, y, z){
+  if(locked) document.exitPointerLock();
+  const bs = countBookshelves(x, y, z);
+  ui = {
+    t: 'enchant',
+    title: 'Enchanting Table',
+    pos: [x, y, z],
+    s: [null, null],
+    bookshelves: bs,
+    options: []
+  };
+  updateEnchantOptions();
+  $('#ui').classList.remove('hid');
+  renderUI();
+}
+
+function applyEnchantment(opt){
+  if(!ui || ui.t !== 'enchant' || !ui.s[0]) return;
+  const item = ui.s[0];
+  const lapis = ui.s[1];
+  if(!gameMode){
+    if(xpLvl < opt.reqLvl || !lapis || lapis.id !== NID['Lapis Lazuli'] || lapis.n < opt.costLapis){
+      toast('Requires Level ' + opt.reqLvl + ' and ' + opt.costLapis + ' Lapis Lazuli!');
+      return;
+    }
+    xpLvl -= opt.costLvl;
+    xp = 0; // Recalculate level
+    hud();
+    lapis.n -= opt.costLapis;
+    if(lapis.n <= 0) ui.s[1] = null;
+  }
+  if(!item.ench) item.ench = [];
+  item.ench.push({ key: opt.enchKey, name: opt.enchName });
+  playerXpSeed = (playerXpSeed * 1664525 + 1013904223) >>> 0;
+  SFX.ding();
+  for(let k = 0; k < 12; k++){
+    spawnDrop(-2, 1, pl.p.x + (Math.random() - .5) * .8, pl.p.y + 0.5, pl.p.z + (Math.random() - .5) * .8);
+  }
+  toast('Enchanted with ' + opt.enchName + '! âœ¨');
+  updateEnchantOptions();
+  renderUI();
+}
 function saveSignText(){
   if(!activeSignKey) return;
   const lines = [
@@ -940,6 +1088,16 @@ function sendChat(t){
   const parts = raw.split(/\s+/);
   const cmd = parts[0];
 
+  // Singleplayer ONLY time commands
+  if(cmd === 'day' || (cmd === 'time' && (parts[1] === 'day' || (parts[1] === 'set' && parts[2] === 'day')))){
+    if(isMP){ chatMsg('Commands disabled in multiplayer.', '#f88'); return; }
+    tod = 60; dayF = 1; toast('Time set to Day'); chatMsg('Time set to Day', '#7fff3a'); return;
+  }
+  if(cmd === 'night' || (cmd === 'time' && (parts[1] === 'night' || (parts[1] === 'set' && parts[2] === 'night')))){
+    if(isMP){ chatMsg('Commands disabled in multiplayer.', '#f88'); return; }
+    tod = 360; dayF = 0; toast('Time set to Night'); chatMsg('Time set to Night', '#7fff3a'); return;
+  }
+
   // Intercept gamemode commands whether typed with slash or directly (e.g. creative, gamemode, /creative, /gamemode)
   if(cmd === 'gamemode' || cmd === 'gm' || cmd === 'creative' || (lower.startsWith('/') && cmd === 'c')){
     if(isMP){
@@ -1281,6 +1439,63 @@ function stampVillageStructures(ch){
   }
 }
 
+// ===== Underground Dungeons (2 Zombie, 2 Skeleton, 2 Spider) =====
+const DUNGEONS = [
+  { x: 14,  y: 12, z: 14,  mob: 'zombie' },
+  { x: -28, y: 14, z: 20,  mob: 'zombie' },
+  { x: 35,  y: 11, z: -25, mob: 'skeleton' },
+  { x: -18, y: 13, z: -32, mob: 'skeleton' },
+  { x: 8,   y: 10, z: -15, mob: 'spider' },
+  { x: -24, y: 12, z: 38,  mob: 'spider' }
+];
+
+function stampDungeons(ch){
+  for(const d of DUNGEONS){
+    for(let dz = -3; dz <= 3; dz++){
+      for(let dx = -3; dx <= 3; dx++){
+        const wx = d.x + dx, wz = d.z + dz;
+        const cx = Math.floor(wx / 16), cz = Math.floor(wz / 16);
+        if(cx === ch.cx && cz === ch.cz){
+          const lx = (wx % 16 + 16) % 16, lz = (wz % 16 + 16) % 16;
+          for(let dy = 0; dy <= 4; dy++){
+            const y = d.y + dy;
+            if(y < 1 || y >= H) continue;
+            const isFloor = (dy === 0);
+            const isCeil = (dy === 4);
+            const isWall = (Math.abs(dx) === 3 || Math.abs(dz) === 3);
+            if(isFloor || isCeil || isWall){
+              const cobbleId = (dx + dz + dy) % 3 === 0 ? NID['Mossy Stone Bricks'] : 4;
+              ch.data[lx + lz * 16 + y * 256] = cobbleId;
+            } else {
+              if(dx === 0 && dz === 0 && dy === 1){
+                ch.data[lx + lz * 16 + y * 256] = NID['Mob Spawner'];
+                if(!activeSpawners.some(s => s.x === d.x && s.y === d.y + 1 && s.z === d.z)){
+                  activeSpawners.push({ x: d.x, y: d.y + 1, z: d.z, mob: d.mob, last: 0 });
+                }
+              } else if((dx === -2 || dx === 2) && dz === 0 && dy === 1){
+                ch.data[lx + lz * 16 + y * 256] = 13; // Chest
+                const chKey = (d.x + dx) + ',' + (d.y + 1) + ',' + (d.z + dz);
+                if(!chests[chKey]){
+                  chests[chKey] = [
+                    { id: 22, n: 3 }, // Iron Ingot
+                    { id: NID.Bread, n: 2 }, // Bread
+                    { id: NID.Bone, n: 4 }, // Bone
+                    { id: NID.Gunpowder, n: 2 }, // Gunpowder
+                    { id: NID.String, n: 3 }, // String
+                    { id: NID['Lapis Lazuli'], n: 6 }, // Lapis for enchanting!
+                    { id: NID.Bucket, n: 1 } // Bucket
+                  ];
+                }
+              } else {
+                ch.data[lx + lz * 16 + y * 256] = 0; // Air
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
 function genChunk(cx, cz){
   const ch = {
     cx, cz,
@@ -1399,6 +1614,8 @@ function genChunk(cx, cz){
 
   // 3. Stamp Village structures
   stampVillageStructures(ch);
+  // 3b. Stamp Underground Dungeons (2 Zombie, 2 Skeleton, 2 Spider)
+  stampDungeons(ch);
 
   // 4. Stamp player edits on top
   for(let lz = 0; lz < 16; lz++){
@@ -1441,6 +1658,9 @@ function gen(){
 }
 
 const activeFluids = new Set(), activeSand = new Set(), fluidFlowDist = new Map(), fluidSources = new Set();
+const blockFacing = new Map();
+const activeSpawners = [];
+let playerXpSeed = Math.floor(Math.random() * 0x7ffffff);
 const thrownEggs = [];
 const fallingBlocks = [];
 
@@ -1514,7 +1734,8 @@ function simWorldPhysics(){
       if(b !== NID.Water && b !== NID.Lava) continue;
       const isSrc = fluidSources.has(k);
       const curDist = isSrc ? 0 : (fluidFlowDist.get(k) || 1);
-      const maxDist = (b === NID.Water) ? 7 : 4;
+      // Flat flow limit: 4 for water, 3 for lava (prevents giant flooding sheets)
+      const maxDist = (b === NID.Water) ? 4 : 3;
       
       const below = get(fx, fy - 1, fz);
       if(below === 0 && fy > 1){
@@ -1688,6 +1909,146 @@ else if(id==NID.Lava){
   else if(swirl > -0.55) b = hx('#d43508');
   else b = hx('#8a1b05');
   m = 0.95 + 0.15 * r;
+}
+// Custom Item & Block Textures
+else if(id == 15){
+  // Oak Stairs
+  if(f == 0){
+    if(y < 8 && x >= 8) return null; // step silhouette
+    b = hx('#b8905a');
+    if(y % 4 === 0 || x === 7) m = 0.72;
+    return b.map(v => Math.round(v * m));
+  }
+  b = hx('#b8905a'); if(y % 4 === 3) m = 0.68;
+}
+else if(id == 16){
+  // Oak Trapdoor
+  b = hx('#9a7a46');
+  if(x <= 1 || x >= 14 || y <= 1 || y >= 14 || x === 7 || x === 8 || y === 7 || y === 8){
+    m = 0.72;
+  } else {
+    m = 1.05;
+  }
+  return b.map(v => Math.round(v * m));
+}
+else if(id == 17){
+  // Oak Sign
+  if(f == 0){
+    if(x >= 7 && x <= 8 && y >= 10 && y <= 15) return hx('#8a5e3b'); // stick
+    if(x >= 1 && x <= 14 && y >= 2 && y <= 9){
+      b = hx('#c9a66b');
+      if(x === 1 || x === 14 || y === 2 || y === 9) m = 0.75;
+      else if(y === 4 || y === 6) m = 0.88;
+      return b.map(v => Math.round(v * m));
+    }
+    return null;
+  }
+  b = hx('#c9a66b');
+}
+else if(id == NID.Ladder){
+  // Ladder
+  if((x >= 2 && x <= 3) || (x >= 12 && x <= 13)){
+    b = hx('#8d6534'); m = (x === 2 || x === 12) ? 1.05 : 0.8;
+    return b.map(v => Math.round(v * m));
+  }
+  if((y === 3 || y === 7 || y === 11 || y === 15) && (x >= 4 && x <= 11)){
+    b = hx('#b8905a'); m = 0.9;
+    return b.map(v => Math.round(v * m));
+  }
+  return null;
+}
+else if(id == NID['Oak Fence']){
+  // Oak Fence
+  if(f == 0){
+    if(((x >= 3 && x <= 4) || (x >= 11 && x <= 12)) && y >= 1 && y <= 14){
+      b = hx('#b8905a'); return b.map(v => Math.round(v * 0.9));
+    }
+    if((y === 4 || y === 5 || y === 10 || y === 11) && x >= 5 && x <= 10){
+      b = hx('#8d6534'); return b.map(v => Math.round(v * 0.8));
+    }
+    return null;
+  }
+  b = hx('#b8905a');
+}
+else if(id == NID['Oak Fence Gate']){
+  // Oak Fence Gate
+  if(f == 0){
+    if(((x >= 1 && x <= 2) || (x >= 13 && x <= 14) || (x >= 7 && x <= 8)) && y >= 3 && y <= 13){
+      b = hx('#b8905a'); return b.map(v => Math.round(v * 0.9));
+    }
+    if((y === 5 || y === 6 || y === 10 || y === 11) && x >= 3 && x <= 12){
+      b = hx('#8d6534'); return b.map(v => Math.round(v * 0.8));
+    }
+    return null;
+  }
+  b = hx('#b8905a');
+}
+else if(id == NID['Oak Slab'] || id == NID['Cobblestone Slab'] || id == NID['Stone Brick Slab']){
+  // Slabs
+  if(f == 0){
+    if(y < 8) return null;
+    const baseCol = (id == NID['Oak Slab']) ? '#b8905a' : (id == NID['Cobblestone Slab']) ? '#707070' : '#7a7a7a';
+    b = hx(baseCol);
+    if(y === 8) m = 1.15;
+    else if(y === 15 || (x + y) % 5 === 0) m = 0.75;
+    return b.map(v => Math.round(v * m));
+  }
+  const baseCol = (id == NID['Oak Slab']) ? '#b8905a' : (id == NID['Cobblestone Slab']) ? '#707070' : '#7a7a7a';
+  b = hx(baseCol);
+}
+else if(id == NID.Bookshelf){
+  // Bookshelf
+  if(f == 0 || f == 1){
+    b = hx('#b8905a'); if(y % 4 === 3) m = 0.68;
+  } else {
+    if(y <= 1 || y >= 14 || x <= 1 || x >= 14 || y === 7 || y === 8){
+      b = hx('#78502a'); m = 0.85;
+    } else {
+      const bookCols = ['#b02e26', '#2a4fd6', '#2e8b22', '#d9b84a', '#8932b8', '#c2410c', '#38bdf8'];
+      const colIdx = Math.floor((x - 2) / 2) + (y > 8 ? 4 : 0);
+      b = hx(bookCols[colIdx % bookCols.length]);
+      if((x - 2) % 2 === 1) m = 0.75;
+      else if(y === 2 || y === 9) m = 1.15;
+    }
+  }
+}
+else if(id == NID['Mob Spawner']){
+  // Mob Spawner
+  const isBar = (x % 4 <= 1) || (y % 4 <= 1) || (x === 0 || x === 15 || y === 0 || y === 15);
+  if(isBar){
+    b = hx('#2b2f33'); m = 0.9 + 0.2 * r;
+    if(x === 0 || y === 0) m = 1.1;
+    return b.map(v => Math.round(v * m));
+  }
+  if(x >= 6 && x <= 9 && y >= 6 && y <= 9){
+    return (r < 0.5) ? hx('#ff7700') : hx('#ffbb22');
+  }
+  return hx('#111315');
+}
+else if(id == NID['Enchanting Table']){
+  // Enchanting Table
+  if(f == 0){
+    b = hx('#1a1020');
+    if(x >= 2 && x <= 13 && y >= 2 && y <= 13){
+      b = hx('#961623');
+      if((x <= 3 || x >= 12) && (y <= 3 || y >= 12)) b = hx('#e6b830');
+      if(x >= 4 && x <= 11 && y >= 5 && y <= 10){
+        if(x === 7 || x === 8) b = hx('#701018');
+        else if(x === 6 && y === 9) b = hx('#c41828');
+        else b = ((x + y) % 3 === 0) ? hx('#2c2824') : hx('#f3eedd');
+      }
+    }
+    return b.map(v => Math.round(v * m));
+  } else if(f == 1){
+    b = hx('#120a18');
+  } else {
+    if(y >= 12){
+      b = (x === 0 || x === 15) ? hx('#e6b830') : hx('#961623');
+    } else {
+      b = hx('#1e1226');
+      if(hs(x * 3 + y, y * 5, 9) < 0.28) b = hx('#38204d');
+    }
+  }
 }
 else if(id>=20&&!IB.has(id))return ip(id,x,y,r);
 return[b[0]*m,b[1]*m,b[2]*m]}
@@ -1977,17 +2338,48 @@ function render(){
     else if(id==NID.Lantern||id==NID['Soul Lantern']){pushBox(tri,x+.5,y+.22,z+.5,.13,.16,.13,0,id*3,b,b,b);pushBox(tri,x+.5,y+.42,z+.5,.04,.08,.04,0,0,b*.4,b*.4,b*.4)}
     else if(id==NID.Anvil){pushBox(tri,x+.5,y+.12,z+.5,.4,.12,.22,0,id*3,b,b,b);pushBox(tri,x+.5,y+.32,z+.5,.18,.08,.14,0,id*3,b,b,b);pushBox(tri,x+.5,y+.52,z+.5,.42,.12,.28,0,id*3,b,b,b)}
     else if(id==NID['Oak Button']){pushBox(tri,x+.5,y+.44,z+.5,.12,.06,.08,0,NID['Oak Planks']*3,b,b,b)}
+    else if(id==15){
+      // Multidirectional Stairs
+      const facing = blockFacing.get(x + ',' + y + ',' + z) || 0;
+      const rot = facing * (Math.PI / 2);
+      pushBox(tri, x + .5, y + .25, z + .5, .5, .25, .5, 0, 18, b, b, b);
+      pushBox(tri, x + .5, y + .75, z + .5, .5, .25, .25, rot, 18, b, b, b);
+    }
     else if(id==NID['Oak Door']){const op=doorOpen.has(x+','+y+','+z);pushBox(tri,op?x+.06:x+.5,y+.5,op?z+.5:z+.06,op?.06:.5,.5,op?.5:.06,0,id*3,b,b,b)}
     else if(id==NID['Oak Fence']){pushBox(tri,x+.5,y+.5,z+.5,.08,.5,.08,0,id*3,b,b,b);pushBox(tri,x+.5,y+.62,z+.5,.5,.05,.04,0,id*3,b,b,b);pushBox(tri,x+.5,y+.35,z+.5,.5,.05,.04,0,id*3,b,b,b)}
-    else if(id==NID['Oak Fence Gate']){const op=doorOpen.has(x+','+y+','+z);pushBox(tri,op?x+.06:x+.5,y+.5,op?z+.5:z+.06,op?.06:.5,.45,op?.5:.06,0,id*3,b,b,b)}
+    else if(id==NID['Oak Fence Gate']){
+      const facing = blockFacing.get(x + ',' + y + ',' + z) || 0;
+      const rot = (facing % 2 === 1) ? (Math.PI / 2) : 0;
+      const op=doorOpen.has(x+','+y+','+z);
+      pushBox(tri,op?x+.06:x+.5,y+.5,op?z+.5:z+.06,op?.06:.5,.45,op?.5:.06,rot,id*3,b,b,b)
+    }
     else if(id==NID.Chain){pushBox(tri,x+.5,y+.5,z+.5,.04,.5,.04,0,id*3,b,b,b)}
     else if(id==NID['Oak Sapling']){pushBox(tri,x+.5,y+.4,z+.5,.4,.4,.01,.785,id*3,b,b,b);pushBox(tri,x+.5,y+.4,z+.5,.4,.4,.01,-.785,id*3,b,b,b)}
     else if(id==NID['Glass Pane']){pushBox(tri,x+.5,y+.5,z+.5,.5,.5,.03,0,id*3,b,b,b)}
+    else if(id==NID['Enchanting Table']){
+      // Obsidian Base
+      pushBox(tri, x + .5, y + .375, z + .5, .5, .375, .5, 0, NID['Enchanting Table'] * 3, b, b, b);
+      // Floating open book hovering above
+      const bookY = y + 0.82 + Math.sin(t * 3) * 0.04;
+      pushBoxRot(tri, x + .5, bookY, z + .5, .20, .035, .16, t * 1.5, 0.2, 0, b, b, b);
+    }
+    else if(id==NID['Mob Spawner']){
+      // Iron cage bars
+      pushBox(tri, x + .5, y + .5, z + .5, .48, .48, .48, 0, NID['Mob Spawner'] * 3, b, b, b);
+      // Spinning miniature mob inside
+      pushBoxRot(tri, x + .5, y + .5, z + .5, .14, .20, .14, t * 4, 0, 0, b * 1.2, b, b);
+    }
     // Farmland rendered natively in chunk mesh
     else if(id===NID['Wheat Crops']||id===NID['Carrot Crops']||id===NID['Potato Crops']||crops[x+','+y+','+z]){const cr=crops[x+','+y+','+z];const sc=cr?Math.min(1,(cr.elapsed||0)/180)*.28+.1:.25;const col=id===NID['Carrot Crops']?[b*.9,b*.5,b*.1]:id===NID['Potato Crops']?[b*.6,b*.8,b*.2]:[b*.7,b*.85,b*.3];pushBox(tri,x+.5,y+sc,z+.5,.25,sc,.02,.785,0,...col);pushBox(tri,x+.5,y+sc,z+.5,.25,sc,.02,-.785,0,...col)}
     else if(id==NID['Red Bed']){pushBox(tri,x+.5,y+.18,z+.5,.48,.18,.48,0,id*3,b,b,b);pushBox(tri,x+.5,y+.26,z+.5,.44,.08,.44,0,0,b*.9,b*.2,b*.2);pushBox(tri,x+.5,y+.30,z+.75,.38,.05,.15,0,0,b*.95,b*.95,b*.95)}
     else if(id==NID['Flower Pot']){pushBox(tri,x+.5,y+.18,z+.5,.12,.18,.12,0,id*3,b,b,b)}
-    else if(id==NID.Ladder){pushBox(tri,x+.5,y+.5,z+.96,.5,.5,.02,0,id*3,b,b,b)}
+    else if(id==NID.Ladder){
+      const lFacing = blockFacing.get(x + ',' + y + ',' + z) || 0;
+      if(lFacing === 0) pushBox(tri, x + .5, y + .5, z + .04, .48, .5, .02, 0, id * 3, b, b, b);
+      else if(lFacing === 1) pushBox(tri, x + .96, y + .5, z + .5, .02, .5, .48, 0, id * 3, b, b, b);
+      else if(lFacing === 2) pushBox(tri, x + .04, y + .5, z + .5, .02, .5, .48, 0, id * 3, b, b, b);
+      else pushBox(tri, x + .5, y + .5, z + .96, .48, .5, .02, 0, id * 3, b, b, b);
+    }
     else{pushBox(tri,x+.5,y+.4,z+.5,.03,.4,.03,0,18,b,b,b);pushBox(tri,x+.5,y+.8,z+.5,.42,.2,.04,0,18,b,b,b)}
   }
 
@@ -2370,7 +2762,7 @@ function closeUI(nl){if(!ui)return;
   }
   if(ui.t === 'chest' && ui.chestKey && nr){
     nr.emit('chest', { key: ui.chestKey, items: chests[ui.chestKey] }).catch(()=>{});
-  }hov=null;if(held){addItem(held.id,held.n,held.d);held=null}if(ui.g)ui.g.forEach(s=>s&&addItem(s.id,s.n));ui=null;$('#ui').classList.add('hid');$('#held').classList.add('hid');if(!nl)cv.requestPointerLock()}
+  }if(ui.t==='enchant'&&ui.s){if(ui.s[0]){addItem(ui.s[0].id,ui.s[0].n,ui.s[0].d);ui.s[0]=null;}if(ui.s[1]){addItem(ui.s[1].id,ui.s[1].n);ui.s[1]=null;}}hov=null;if(held){addItem(held.id,held.n,held.d);held=null}if(ui.g)ui.g.forEach(s=>s&&addItem(s.id,s.n));ui=null;$('#ui').classList.add('hid');$('#held').classList.add('hid');if(!nl)cv.requestPointerLock()}
 function renderUI(){
   if(ui.t === 'creative'){ renderCreativeUI(); return; }
   const isMP = isMultiplayerWorld || !!nr || (activeWorldId === 'server_9a') || hostIsRunning;
@@ -2400,6 +2792,70 @@ if(ui.t==='anvil'){
       ui.s[2]={id:ui.s[0].id,n:1,d:Math.max(0,ui.s[0].d-Math.floor(maxD*0.35))};
     } else ui.s[2]=null;
   } else ui.s[2]=null;
+}
+if(ui.t === 'enchant'){
+  const row = document.createElement('div'); row.className = 'row';
+  row.style.cssText = 'display:flex;flex-direction:column;gap:10px;width:100%;margin-bottom:8px';
+  
+  const topBar = document.createElement('div');
+  topBar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;background:#151221;padding:8px 12px;border:2px solid #582a72;border-radius:4px';
+  topBar.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="font-size:12px;font-weight:bold;color:#c084fc">Bookshelves:</div>
+      <div style="background:#2e1045;padding:2px 8px;border-radius:3px;color:#e9d5ff;font-weight:bold">${ui.bookshelves} / 15</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="font-size:12px;font-weight:bold;color:#4ade80">Your Level:</div>
+      <div style="background:#064e3b;padding:2px 8px;border-radius:3px;color:#86efac;font-weight:bold">${xpLvl}</div>
+    </div>
+  `;
+  
+  const mainDiv = document.createElement('div');
+  mainDiv.style.cssText = 'display:flex;gap:14px;align-items:flex-start';
+  
+  const leftBox = document.createElement('div');
+  leftBox.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;background:#1a162b;padding:10px;border:2px solid #43285c;border-radius:4px';
+  leftBox.innerHTML = '<div style="font-size:10px;color:#bbb">Item &amp; Lapis</div>';
+  const slotsDiv = document.createElement('div');
+  slotsDiv.style.cssText = 'display:flex;gap:8px;align-items:center';
+  slotsDiv.append(slEl(ui.s, 0, r => { clk(ui.s, 0, r); updateEnchantOptions(); renderUI(); }));
+  slotsDiv.append(slEl(ui.s, 1, r => { clk(ui.s, 1, r); updateEnchantOptions(); renderUI(); }));
+  leftBox.append(slotsDiv);
+  
+  const rightBox = document.createElement('div');
+  rightBox.style.cssText = 'display:flex;flex-direction:column;gap:6px;flex:1';
+  
+  const opts = ui.options || [];
+  for(let s = 0; s < 3; s++){
+    const opt = opts[s];
+    const ob = document.createElement('div');
+    ob.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#241838;border:2px solid #6b21a8;border-radius:4px;cursor:pointer;transition:all .15s';
+    
+    if(!opt){
+      ob.style.opacity = '0.35';
+      ob.style.cursor = 'default';
+      ob.innerHTML = '<div style="font-size:11px;color:#888;font-style:italic">Insert an item to enchant</div>';
+    } else {
+      const canAfford = (gameMode || (xpLvl >= opt.reqLvl && ui.s[1] && ui.s[1].id === NID['Lapis Lazuli'] && ui.s[1].n >= opt.costLapis));
+      if(!canAfford){
+        ob.style.opacity = '0.5';
+        ob.style.borderColor = '#475569';
+      }
+      ob.innerHTML = `
+        <div style="display:flex;flex-direction:column">
+          <div style="font-size:12px;font-weight:bold;color:#e9d5ff">&#5888; ${opt.enchName} ... ?</div>
+          <div style="font-size:10px;color:#c084fc">Cost: ${opt.costLvl} Level${opt.costLvl > 1 ? 's' : ''} &amp; ${opt.costLapis} Lapis</div>
+        </div>
+        <div style="font-size:14px;font-weight:bold;color:#38bdf8;background:#0c4a6e;padding:3px 8px;border-radius:3px">${opt.reqLvl}</div>
+      `;
+      ob.onclick = () => { applyEnchantment(opt); };
+    }
+    rightBox.append(ob);
+  }
+  
+  mainDiv.append(leftBox, rightBox);
+  row.append(topBar, mainDiv);
+  p.append(row);
 }
 if(ui.c){
   const chestGrid = grid(ui.c, 9);
@@ -2439,7 +2895,53 @@ setInterval(()=>{if(ui&&ui.f&&!held)renderUI()},500);
 
 // ---------- physics / player ----------
 const pl={p:new THREE.Vector3(24.5,40,24.5),v:new THREE.Vector3(),ground:false,yaw:0,pitch:0,step:true},keys={};
-function hit(p,w,h){for(let y=Math.floor(p.y);y<=Math.floor(p.y+h);y++)for(let z=Math.floor(p.z-w);z<=Math.floor(p.z+w);z++)for(let x=Math.floor(p.x-w);x<=Math.floor(p.x+w);x++){const q=get(x,y,z);if(q&&!NS[q]&&!(q==15&&p.y>=y+.5))return true}return false}
+function hit(p,w,h){
+  for(let y=Math.floor(p.y);y<=Math.floor(p.y+h);y++)
+  for(let z=Math.floor(p.z-w);z<=Math.floor(p.z+w);z++)
+  for(let x=Math.floor(p.x-w);x<=Math.floor(p.x+w);x++){
+    const q=get(x,y,z);
+    if(!q) continue;
+    // Button has NO hitbox (walk right through)
+    if(q === NID['Oak Button']) continue;
+    // Ladder is passable (allows climbing inside block)
+    if(q === NID.Ladder) continue;
+    // Closed doors and fence gates BLOCK player (solid)
+    if(q === NID['Oak Door']){
+      if(doorOpen.has(x + ',' + y + ',' + z)) continue;
+      return true;
+    }
+    if(q === NID['Oak Fence Gate']){
+      if(doorOpen.has(x + ',' + y + ',' + z)) continue;
+      return true;
+    }
+    // Trapdoors: closed trapdoors act as solid floor, open trapdoors act as solid vertical wall!
+    if(q === 16){
+      const op = doorOpen.has(x + ',' + y + ',' + z);
+      if(op){
+        // Upright trapdoor: solid barrier
+        return true;
+      } else {
+        // Flat trapdoor: solid floor
+        if(p.y >= y + 0.08) return true;
+        return true;
+      }
+    }
+    // Fences
+    if(q === NID['Oak Fence']) return true;
+    // Slabs: half-block height (0.5)
+    if(q === NID['Oak Slab'] || q === NID['Cobblestone Slab'] || q === NID['Stone Brick Slab']){
+      if(p.y < y + 0.5) return true;
+      continue;
+    }
+    // Stairs: half-block height base, solid back
+    if(q === 15){
+      if(p.y < y + 0.5) return true;
+      continue;
+    }
+    if(!NS[q]) return true;
+  }
+  return false;
+}
 function move(e,dt,w,h){
   const og=e.ground; e.ground=false;
   for(const a of ['x','z','y']){
@@ -2454,12 +2956,28 @@ function move(e,dt,w,h){
     if(hit(e.p,w,h)){
       const canStep=og||(e===pl&&(get(Math.floor(e.p.x),Math.floor(e.p.y+0.3),Math.floor(e.p.z))===NID.Water))||(e!==pl);
       if((e.step || e === pl)&&canStep&&a!="y"){
+        // Smooth step assist over slabs (0.5) and stairs
+        e.p.y+=0.55; if(!hit(e.p,w,h)) continue; e.p.y-=0.55;
         e.p.y+=0.65; if(!hit(e.p,w,h)) continue; e.p.y-=0.65;
       }
       e.p[a]-=d;
       if(a=='y'&&e.v.y<0) e.ground=true;
       e.blocked=a!='y';
       e.v[a]=0;
+    }
+  }
+  // Ladder climbing mechanics
+  if(e === pl){
+    const lb1 = get(Math.floor(pl.p.x), Math.floor(pl.p.y), Math.floor(pl.p.z));
+    const lb2 = get(Math.floor(pl.p.x), Math.floor(pl.p.y + 0.8), Math.floor(pl.p.z));
+    if(lb1 === NID.Ladder || lb2 === NID.Ladder){
+      if(keys[binds.jump] || keys[binds.fwd]){
+        pl.v.y = 3.2; // Climb up!
+      } else if(crouch){
+        pl.v.y = 0; // Hold position!
+      } else {
+        pl.v.y = Math.max(pl.v.y, -1.6); // Slow controlled descent
+      }
     }
   }
 }
@@ -2507,9 +3025,14 @@ function popMobs(){
         const z = Math.floor(pl.p.z + rnd(-40, 40));
         if(Math.hypot(x - pl.p.x, z - pl.p.z) > 10){
           const y = getTop(x, z);
-          if(y >= 18 && get(x, y, z) !== NID.Water && get(x, y, z) !== NID.Lava){
-            mkMob(t, x + 0.5, y + 1.05, z + 0.5);
-            break;
+          if(y >= 23){
+            const bBelow = get(x, y - 1, z);
+            const bAt = get(x, y, z);
+            const bAbove = get(x, y + 1, z);
+            if(bBelow !== NID.Water && bBelow !== NID.Lava && bAt !== NID.Water && bAt !== NID.Lava && bAbove !== NID.Water && bAbove !== NID.Lava){
+              mkMob(t, x + 0.5, y + 1.05, z + 0.5);
+              break;
+            }
           }
         }
       }
@@ -2569,6 +3092,19 @@ function updMobs(dt){
     } else if(HOST[m.type] && dist < 14){ m.dir = Math.atan2(dx, dz); }
     else if(m.tm <= 0 && !m.inLove){ m.tm = 1 + Math.random() * 3; m.dir = Math.random() < .4 ? -9 : Math.random() * 6.28; }
     
+    // Water Avoidance: mobs steer away from water blocks!
+    if(m.dir !== -9){
+      const checkX = Math.floor(m.p.x + Math.sin(m.dir) * 1.5);
+      const checkZ = Math.floor(m.p.z + Math.cos(m.dir) * 1.5);
+      const checkY = Math.floor(m.p.y);
+      const bInFront = get(checkX, checkY, checkZ);
+      const bBelowFront = get(checkX, checkY - 1, checkZ);
+      if(bInFront === NID.Water || bBelowFront === NID.Water || bInFront === NID.Lava || bBelowFront === NID.Lava){
+        m.dir += Math.PI * 0.85 + (Math.random() - 0.5);
+        m.tm = 2.0;
+      }
+    }
+
     const sp = m.dir == -9 ? 0 : HOST[m.type] ? 2.3 : (attracted ? 2.0 : 1.2);
     if(m.kb > 0) m.kb -= dt;
     else { m.v.x = Math.sin(m.dir) * sp; m.v.z = Math.cos(m.dir) * sp; }
@@ -2845,6 +3381,21 @@ class UniversalNetwork {
               document.exitPointerLock();
               show('multi');
               updateServerStatusBadge({ online: false });
+            }
+          } else if(channel === 'cmd_tp'){
+            if(data && (data.target === this.peerId || (data.target && myName && data.target.toLowerCase() === myName.toLowerCase()))){
+              pl.p.set(data.toX, data.toY, data.toZ);
+              fy = data.toY;
+              pl.v.set(0, 0, 0);
+              toast('Teleported to ' + (data.toName || 'player'));
+              chatMsg('[Console] Teleported to ' + (data.toName || 'player'), '#7fff3a');
+            }
+          } else if(channel === 'cmd_gamemode'){
+            if(data && (data.target === this.peerId || (data.target && myName && data.target.toLowerCase() === myName.toLowerCase()))){
+              gameMode = data.mode;
+              if(!gameMode) flyMode = false;
+              toast('Gamemode set to ' + (gameMode ? 'Creative' : 'Survival'));
+              chatMsg('[Console] Gamemode set to ' + (gameMode ? 'Creative' : 'Survival'), '#7fff3a');
             }
           } else if(channel === 'kick'){
             if(data && (data.target === this.peerId || data.target === myName)){
@@ -3195,6 +3746,52 @@ const Host9A = {
     } else if(op === '/reset' || op === '/wipe'){ Host9A.resetServer(); } else if(op === '/clear'){
       const c = document.getElementById('host-console');
       if(c) c.innerHTML = '';
+    } else if(op === '/tp'){
+      const p1Name = (parts[1] || '').trim();
+      const p2Name = (parts[2] || '').trim();
+      if(!p1Name || !p2Name){
+        Host9A.log('warn', 'Usage: /tp <player1> <player2>');
+        return;
+      }
+      if(!this.net || !this.net.connected){
+        Host9A.log('warn', 'Server network not connected.');
+        return;
+      }
+      let p1 = null, p2 = null;
+      for(const [k, v] of this.net.peers){
+        const name = (v.presence && v.presence.n) ? v.presence.n : pn(v);
+        if(name.toLowerCase() === p1Name.toLowerCase()) p1 = v;
+        if(name.toLowerCase() === p2Name.toLowerCase()) p2 = v;
+      }
+      if(!p1){ Host9A.log('warn', 'Player "' + p1Name + '" not found.'); return; }
+      if(!p2){ Host9A.log('warn', 'Player "' + p2Name + '" not found.'); return; }
+      const p2X = p2.curX !== undefined ? p2.curX : p2.presence.x;
+      const p2Y = p2.curY !== undefined ? p2.curY : p2.presence.y;
+      const p2Z = p2.curZ !== undefined ? p2.curZ : p2.presence.z;
+      this.net.emit('cmd_tp', { target: p1.peer, toX: p2X, toY: p2Y, toZ: p2Z, toName: p2Name });
+      Host9A.log('info', 'Teleported ' + p1Name + ' to ' + p2Name);
+    } else if(op === '/gamemode'){
+      const modeStr = (parts[1] || '').toLowerCase();
+      const targetName = (parts[2] || '').trim();
+      if(!modeStr || !targetName){
+        Host9A.log('warn', 'Usage: /gamemode <survival|creative> <player>');
+        return;
+      }
+      if(!this.net || !this.net.connected){
+        Host9A.log('warn', 'Server network not connected.');
+        return;
+      }
+      let found = null;
+      for(const [k, v] of this.net.peers){
+        const name = (v.presence && v.presence.n) ? v.presence.n : pn(v);
+        if(name.toLowerCase() === targetName.toLowerCase()){
+          found = v; break;
+        }
+      }
+      if(!found){ Host9A.log('warn', 'Player "' + targetName + '" not found.'); return; }
+      const isCreative = (modeStr === 'creative' || modeStr === '1' || modeStr === 'c');
+      this.net.emit('cmd_gamemode', { target: found.peer, mode: isCreative ? 1 : 0 });
+      Host9A.log('info', 'Set ' + targetName + ' to ' + (isCreative ? 'Creative' : 'Survival'));
     } else if(op === '/day'){
       tod = 100;
       if(this.net) this.net.emit('time', { tod: 100 });
@@ -3204,7 +3801,7 @@ const Host9A = {
       if(this.net) this.net.emit('time', { tod: 350 });
       Host9A.log('info', 'Time set to Night across all players.');
     } else {
-      Host9A.log('warn', 'Unknown command. Available: /say, /kick <player>, /pvp on|off, /day, /night, /clear');
+      Host9A.log('warn', 'Unknown command. Available: /say, /kick <player>, /pvp on|off, /day, /night, /tp <p1> <p2>, /gamemode <c|s> <p>, /clear');
     }
   },
   
@@ -3759,6 +4356,10 @@ else if(e.button==2){
     if(id==NID.Anvil)return openAnvilUI(k);
   }
   const clickedBlock = get(r.x, r.y, r.z);
+  if(clickedBlock === NID['Enchanting Table']){
+    openEnchantUI(r.x, r.y, r.z);
+    return;
+  }
   if(clickedBlock === 17){ openSignUI(r.x + ',' + r.y + ',' + r.z); return; }
   if(clickedBlock === 16){
     const dk = r.x + ',' + r.y + ',' + r.z;
@@ -3839,6 +4440,27 @@ else if(e.button==2){
     fluidSources.delete(sk);
     fluidFlowDist.delete(sk);
     setB(r.x,r.y,r.z,0);
+    // Dissipate connected flowing fluid that lost source
+    const checkQueue = [sk];
+    const visited = new Set([sk]);
+    while(checkQueue.length > 0){
+      const curr = checkQueue.shift();
+      const [cx, cy, cz] = curr.split(',').map(Number);
+      const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+      for(const [dx,dy,dz] of dirs){
+        const nx = cx+dx, ny = cy+dy, nz = cz+dz;
+        const nk = nx + ',' + ny + ',' + nz;
+        if(!visited.has(nk)){
+          visited.add(nk);
+          const nb = get(nx, ny, nz);
+          if((nb === NID.Water || nb === NID.Lava) && !fluidSources.has(nk)){
+            setB(nx, ny, nz, 0);
+            fluidFlowDist.delete(nk);
+            checkQueue.push(nk);
+          }
+        }
+      }
+    }
     inv[slot]={id:clickedBlock===NID.Water?NID['Water Bucket']:NID['Lava Bucket'],n:1};
     SFX.splash();
     hud();return;
@@ -3870,10 +4492,19 @@ else if(e.button==2){
     }
   }
   if(s&&s.id===NID.Bonemeal){
-    const ck2=r.x+','+(r.y+1)+','+r.z;
-    if(crops[ck2]||get(r.x,r.y+1,r.z)===NID['Wheat Crops']||get(r.x,r.y+1,r.z)===NID['Carrot Crops']||get(r.x,r.y+1,r.z)===NID['Potato Crops']){
-      if(!crops[ck2]) crops[ck2]={type:NID.Seeds,elapsed:0};
-      crops[ck2].elapsed=360;toast('Crop grew instantly!');if(!gameMode){if(--s.n<=0)inv[slot]=null;}hud();return;
+    const k0 = r.x + ',' + r.y + ',' + r.z;
+    const k1 = r.x + ',' + (r.y + 1) + ',' + r.z;
+    const cropKey = (crops[k0] || [NID['Wheat Crops'], NID['Carrot Crops'], NID['Potato Crops']].includes(get(r.x, r.y, r.z))) ? k0 : k1;
+    const [cx, cy, cz] = cropKey.split(',').map(Number);
+    const cb = get(cx, cy, cz);
+    if(crops[cropKey] || [NID['Wheat Crops'], NID['Carrot Crops'], NID['Potato Crops']].includes(cb)){
+      if(!crops[cropKey]) crops[cropKey] = { type: NID.Seeds, elapsed: 0 };
+      crops[cropKey].elapsed = 360;
+      toast('Crop grew instantly! ðŸŒ¾');
+      SFX.pop();
+      for(let k=0; k<6; k++) spawnDrop(-2, 1, cx + .5 + (Math.random()-.5)*.4, cy + .7, cz + .5 + (Math.random()-.5)*.4);
+      if(!gameMode){ if(--s.n <= 0) inv[slot] = null; }
+      hud(); return;
     }
     if(saplings[r.x+','+r.y+','+r.z]||get(r.x,r.y,r.z)===NID['Oak Sapling']){growTree(r.x,r.y,r.z);toast('Tree grew!');if(!gameMode){if(--s.n<=0)inv[slot]=null;}hud();return;}
   }
@@ -3924,8 +4555,19 @@ else if(e.button==2){
     }
   }
   if(s&&isB(s.id)&&r.pv){
-    const[x,y,z]=r.pv;setB(x,y,z,s.id);const bad=hit(pl.p,.3,1.8);
-    if(bad){setB(x,y,z,0);}else{SFX.place(s.id);if(!gameMode){if(--s.n<=0)inv[slot]=null;}}
+    const[x,y,z]=r.pv;
+    const bk = x + ',' + y + ',' + z;
+    const fwdX = -Math.sin(pl.yaw), fwdZ = -Math.cos(pl.yaw);
+    const cardinal = Math.abs(fwdX) > Math.abs(fwdZ) ? (fwdX > 0 ? 1 : 2) : (fwdZ > 0 ? 3 : 0);
+    if(s.id === NID.Ladder && r.x != null){
+      const dx = r.x - x, dz = r.z - z;
+      const lFacing = dx === 1 ? 1 : (dx === -1 ? 2 : (dz === 1 ? 3 : 0));
+      blockFacing.set(bk, lFacing);
+    } else {
+      blockFacing.set(bk, cardinal);
+    }
+    setB(x,y,z,s.id);const bad=hit(pl.p,.3,1.8);
+    if(bad){setB(x,y,z,0);blockFacing.delete(bk);}else{SFX.place(s.id);if(!gameMode){if(--s.n<=0)inv[slot]=null;}}
   }
 }});
 addEventListener('mouseup',e=>{if(e.button==0){mining=false;br.k=''}});
@@ -4119,6 +4761,12 @@ bar.classList.remove('hid');bar.firstChild.style.width=Math.min(100,br.t/need*10
 const cNeed = gameMode ? 0 : need;
 if(id!=14&&br.t>=cNeed){
   SFX.breakBlock(id); setB(r.x,r.y,r.z,0);
+  if(id === 17 || (T[id] && T[id][0].includes('Sign'))){
+    delete signs[r.x + ',' + r.y + ',' + r.z];
+  }
+  if(id === 17 || (T[id] && T[id][0].includes('Sign'))){
+    delete signs[r.x + ',' + r.y + ',' + r.z];
+  }
   if(id===5){
     // Lightweight canopy scan (no FPS drops on break, leaves decay slowly over 15-45 seconds)
     for(let ldx=-2; ldx<=2; ldx++) for(let ldy=0; ldy<=4; ldy++) for(let ldz=-2; ldz<=2; ldz++){
@@ -4151,10 +4799,17 @@ if(id!=14&&br.t>=cNeed){
 }}else{bar.classList.add('hid');if(!mining)br.k=''}
 updMobs(dt);updDrops(dt);
 for(const k in furn){
-  const f=furn[k],i=f.s[0],o=SMELT[i&&i.id];
+  const f=furn[k],i=f.s[0];
   const [fx,fy,fz]=k.split(',').map(Number);
-  const isBlast=get(fx,fy,fz)===NID['Blast Furnace'];
-  const speedMult=isBlast?2.0:1.0;
+  const curB=get(fx,fy,fz);
+  const isBlast=curB===NID['Blast Furnace'];
+  const isSmoker=curB===NID.Smoker;
+  const isFood=i&&(FOOD[i.id]!==undefined||[NID['Raw Chicken'],NID['Raw Mutton'],NID.Potato].includes(i.id));
+  const isOre=i&&([NID['Raw Iron'],NID['Raw Gold'],9,10].includes(i.id)||OREC[i.id]);
+  let o = SMELT[i&&i.id];
+  if(isSmoker && !isFood) o = null;
+  if(isBlast && !isOre) o = null;
+  const speedMult=(isBlast||isSmoker)?2.0:1.0;
   if(o&&(!f.s[2]||(f.s[2].id==o&&f.s[2].n<64))&&(f.b>0||(f.s[1]&&FUEL[f.s[1].id]))){
     if(f.b<=0){f.b=f.mx=FUEL[f.s[1].id];if(--f.s[1].n<=0)f.s[1]=null;}
     f.b-=dt*speedMult;
@@ -4187,7 +4842,28 @@ setInterval(()=>{
     arm: arm.map(a => a ? a.id : 0), held: cur() ? cur().id : 0
   }).catch(()=>{});
 }, 100);
+// Underground Spawner Proximity Spawning (within 16 blocks)
+setInterval(() => {
+  if(!playing) return;
+  const now = performance.now();
+  for(const sp of activeSpawners){
+    if(now - sp.last < 3800) continue;
+    const dist = Math.hypot(pl.p.x - sp.x, pl.p.z - sp.z);
+    if(dist < 16 && Math.abs(pl.p.y - sp.y) < 10){
+      sp.last = now;
+      const nearbyMobs = mobs.filter(m => Math.hypot(m.p.x - sp.x, m.p.z - sp.z) < 8).length;
+      if(nearbyMobs < 5){
+        const ox = (Math.random() - 0.5) * 3;
+        const oz = (Math.random() - 0.5) * 3;
+        mkMob(sp.mob, sp.x + ox, sp.y, sp.z + oz);
+        for(let k = 0; k < 6; k++) spawnDrop(-2, 1, sp.x + 0.5, sp.y + 0.7, sp.z + 0.5);
+      }
+    }
+  }
+}, 1000);
 applyS();requestAnimationFrame(frame);
 </script></body></html>
+
+
 
 
