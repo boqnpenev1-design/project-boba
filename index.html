@@ -540,13 +540,42 @@ function drawFirstPersonHand(tri){
   
   const s = cur();
   if(s && T[s.id]){
-    const iPos = P(tX - 0.03, tY + 0.02, tZ + 0.05);
-    const armYaw = pl.yaw - 0.35 - swP * 0.55;
-    if(isB(s.id)){
-      pushBox(tri, iPos[0], iPos[1], iPos[2], 0.08, 0.08, 0.08, armYaw, s.id * 3, b, b, b);
+    const swTilt = swP * 0.45;
+    const swFwdAmt = swP * 0.12;
+    const isFullBlock = isB(s.id) && !['Torch','Soul Torch','Oak Button','Oak Door','Red Bed','Ladder','Oak Sapling','Glass Pane'].some(n => T[s.id][0].includes(n));
+    if(isFullBlock){
+      const bCenter = P(tX - 0.02, tY + 0.06 - swTilt * 0.1, tZ + 0.06 + swFwdAmt);
+      pushBox(tri, bCenter[0], bCenter[1], bCenter[2], 0.05, 0.05, 0.05, pl.yaw - 0.35, s.id * 3, b, b, b);
     } else {
-      // Tilted tool angled forward with swing rotation
-      pushBox(tri, iPos[0], iPos[1] - swP * 0.08, iPos[2] + swP * 0.05, 0.12, 0.12, 0.02, armYaw + 0.785, s.id * 3, b, b, b);
+      // 2D viewmodel sprite quad angled forward in view space (crisp Minecraft tool/item in hand)
+      const baseLx = tX - 0.02 - swP * 0.08;
+      const baseLy = tY + 0.04 - swTilt * 0.25;
+      const baseLz = tZ + 0.06 + swFwdAmt;
+      const sz = 0.22;
+      
+      const p0 = P(baseLx, baseLy, baseLz);
+      const p1 = P(baseLx + sz * 0.8, baseLy - sz * 0.2, baseLz + sz * 0.4);
+      const p2 = P(baseLx + sz * 0.7, baseLy + sz * 0.8, baseLz + sz * 0.6);
+      const p3 = P(baseLx - sz * 0.1, baseLy + sz * 1.0, baseLz + sz * 0.2);
+      
+      const k = s.id * 3;
+      const uv0 = tuv(k, [0, 1]), uv1 = tuv(k, [1, 1]), uv2 = tuv(k, [1, 0]), uv3 = tuv(k, [0, 0]);
+      
+      // Front face
+      tri.push(p0[0], p0[1], p0[2], uv0[0], uv0[1], b, b, b);
+      tri.push(p1[0], p1[1], p1[2], uv1[0], uv1[1], b, b, b);
+      tri.push(p2[0], p2[1], p2[2], uv2[0], uv2[1], b, b, b);
+      tri.push(p0[0], p0[1], p0[2], uv0[0], uv0[1], b, b, b);
+      tri.push(p2[0], p2[1], p2[2], uv2[0], uv2[1], b, b, b);
+      tri.push(p3[0], p3[1], p3[2], uv3[0], uv3[1], b, b, b);
+      
+      // Back face
+      tri.push(p2[0], p2[1], p2[2], uv2[0], uv2[1], b*0.9, b*0.9, b*0.9);
+      tri.push(p1[0], p1[1], p1[2], uv1[0], uv1[1], b*0.9, b*0.9, b*0.9);
+      tri.push(p0[0], p0[1], p0[2], uv0[0], uv0[1], b*0.9, b*0.9, b*0.9);
+      tri.push(p3[0], p3[1], p3[2], uv3[0], uv3[1], b*0.9, b*0.9, b*0.9);
+      tri.push(p2[0], p2[1], p2[2], uv2[0], uv2[1], b*0.9, b*0.9, b*0.9);
+      tri.push(p0[0], p0[1], p0[2], uv0[0], uv0[1], b*0.9, b*0.9, b*0.9);
     }
   }
 }
@@ -759,6 +788,12 @@ const SFX = {
     this.playFile('damage/fallsmall.ogg', 0.55, 'fall');
   },
   
+  bow(){
+    this.pop();
+  },
+  chest(open = true){
+    this.playFile(open ? 'random/door_open.ogg' : 'random/door_close.ogg', 0.45, 'click');
+  },
   pop(){
     const now = performance.now();
     if(now - this.lastPopTime < 90) return;
@@ -951,14 +986,6 @@ ci.addEventListener('keydown',e=>{e.stopPropagation();if(e.key=='Enter'){const v
 function onChat(d){const me=peersList.find(q=>q.isMe);if(d.to&&(!me||d.to!==me.peer))return;const f=String(d.from||'?').slice(0,16),t=String(d.t||'').slice(0,200);chatMsg(d.me?'* '+f+' '+t:d.to?'['+f+' → you] '+t:'<'+f+'> '+t,d.to?'#d9a0ff':null)}
 function onPeers(c){
   peersList=c.peers;
-  if(myPublicIp){
-    const sameIp = c.peers.find(q => !q.isMe && q.presence && q.presence.ip && q.presence.ip === myPublicIp);
-    if(sameIp){
-      toast('Rejected: Another player with your IP is already connected.');
-      setTimeout(()=>{ if(nr) nr.close(); show('main'); location.reload(); }, 1200);
-      return;
-    }
-  }
   const duplicate = c.peers.filter(q => !q.isMe && pn(q).toLowerCase() === myName.toLowerCase());
   if(duplicate.length > 0){
     myName = enforceUniqueName(myName);
@@ -1396,7 +1423,7 @@ function gen(){
   dirty = true;
 }
 
-const activeFluids = new Set(), activeSand = new Set(), fluidFlowDist = new Map();
+const activeFluids = new Set(), activeSand = new Set(), fluidFlowDist = new Map(), fluidSources = new Set();
 const thrownEggs = [];
 const fallingBlocks = [];
 
@@ -1441,55 +1468,64 @@ function triggerFluidSandUpdate(x, y, z){
 }
 function simWorldPhysics(){
   if(!playing) return;
-  // Sand Gravity via smooth FallingBlock entities (zero chunk mesh thrashing, solid 60 FPS)
+  // Sand Gravity via smooth FallingBlock entities (batched columns, solid 60 FPS)
   if(activeSand.size > 0){
-    const sandBatch = Array.from(activeSand).slice(0, 30);
+    const sandBatch = Array.from(activeSand).slice(0, 20);
     for(const k of sandBatch){
       activeSand.delete(k);
       const [sx, sy, sz] = k.split(',').map(Number);
       if(get(sx, sy, sz) === 8){
         const below = get(sx, sy - 1, sz);
         if(below === 0 || below === NID.Water){
-          spawnFallingBlock(sx, sy, sz, 8);
-          if(get(sx, sy + 1, sz) === 8) activeSand.add(sx + ',' + (sy + 1) + ',' + sz);
+          // Convert continuous vertical sand column at once
+          for(let cy = sy; cy < H - 1; cy++){
+            if(get(sx, cy, sz) === 8){
+              spawnFallingBlock(sx, cy, sz, 8);
+            } else break;
+          }
         }
       }
     }
   }
-  // Fluid Flow
+  // Fluid Flow (Strict horizontal limit: 7 for water, 4 for lava, infinite downward)
   if(activeFluids.size > 0){
-    const fluidBatch = Array.from(activeFluids).slice(0, 40);
+    const fluidBatch = Array.from(activeFluids).slice(0, 25);
     for(const k of fluidBatch){
       activeFluids.delete(k);
       const [fx, fy, fz] = k.split(',').map(Number);
       const b = get(fx, fy, fz);
       if(b !== NID.Water && b !== NID.Lava) continue;
+      const isSrc = fluidSources.has(k);
+      const curDist = isSrc ? 0 : (fluidFlowDist.get(k) || 1);
+      const maxDist = (b === NID.Water) ? 7 : 4;
+      
       const below = get(fx, fy - 1, fz);
-      if(below === 0){
+      if(below === 0 && fy > 1){
+        const bk = fx + ',' + (fy - 1) + ',' + fz;
         setB(fx, fy - 1, fz, b);
-        activeFluids.add(fx + ',' + (fy - 1) + ',' + fz);
+        fluidFlowDist.set(bk, 1);
+        activeFluids.add(bk);
       } else if(b === NID.Water && below === NID.Lava){
         setB(fx, fy - 1, fz, 4);
       } else if(b === NID.Lava && below === NID.Water){
         setB(fx, fy - 1, fz, 3);
-      } else {
-        const curDist = fluidFlowDist.get(k) || 0;
-        const maxDist = (b === NID.Water) ? 7 : 4;
-        if(curDist < maxDist){
-          const dirs = [[1,0], [-1,0], [0,1], [0,-1]];
-          for(const [dx, dz] of dirs){
-            const nx = fx + dx, nz = fz + dz;
-            const adj = get(nx, fy, nz);
-            const nk = nx + ',' + fy + ',' + nz;
-            if(adj === 0){
-              setB(nx, fy, nz, b);
-              fluidFlowDist.set(nk, curDist + 1);
-              if(get(nx, fy - 1, nz) === 0) activeFluids.add(nk);
-            } else if(b === NID.Water && adj === NID.Lava){
-              setB(nx, fy, nz, 4);
-            } else if(b === NID.Lava && adj === NID.Water){
-              setB(nx, fy, nz, 4);
+      } else if(curDist < maxDist && (below !== 0)){
+        // Spreads horizontally only on flat/solid ground
+        const dirs = [[1,0], [-1,0], [0,1], [0,-1]];
+        for(const [dx, dz] of dirs){
+          const nx = fx + dx, nz = fz + dz;
+          const adj = get(nx, fy, nz);
+          const nk = nx + ',' + fy + ',' + nz;
+          if(adj === 0){
+            setB(nx, fy, nz, b);
+            fluidFlowDist.set(nk, curDist + 1);
+            if(curDist + 1 < maxDist || get(nx, fy - 1, nz) === 0){
+              activeFluids.add(nk);
             }
+          } else if(b === NID.Water && adj === NID.Lava){
+            setB(nx, fy, nz, 4);
+          } else if(b === NID.Lava && adj === NID.Water){
+            setB(nx, fy, nz, 4);
           }
         }
       }
@@ -1556,9 +1592,50 @@ else if(id==13){if(x==0||y==0||x==15||y==15)b=hx('#5b3d14');else if(f==2&&x>6&&x
 else if(id==14)m=.4+.4*r;
 else if(OREC[id]){b=hx('#808080');if(hs(Math.floor(x/2)+id,Math.floor(y/2),7)<.3)b=hx(OREC[id])}
 else if(id==NID.Farmland){if(f==2||f==0){b=hx('#422a15');if(y%2==0)m=.78}else{b=hx('#8a5e3b')}}
-else if(id==NID['White Wool']||(T[id]&&T[id][0].includes('Wool'))){b=hx('#e8e8e8');const knit=((Math.floor(x/2)+Math.floor(y/2))%2===0)?.92:1.06;const th=((x%2===0)^(y%2===0))?.95:1.0;m=(.85+.25*r)*knit*th;}
-else if(id==NID['Oak Door']){b=hx('#ab7c48');if((x<=1||x>=14||y<=1||y>=14))m=.7;else if((x>=4&&x<=11)&&(y>=3&&y<=7||y>=9&&y<=13))m=.82;if(x==12&&y==7)b=hx('#222222');}
-else if(id==NID['Oak Button']){b=hx('#b8905a');if(x==0||y==0||x==15||y==15)m=.75;}
+else if(id==NID['White Wool']||(T[id]&&T[id][0].includes('Wool'))){
+  b=hx('#ededed');
+  const curl=((x^y)&2)?0.94:1.04;
+  m=(0.90+0.18*r)*curl;
+}
+else if(id==NID.Torch||id==NID['Soul Torch']){
+  const isSoul=id==NID['Soul Torch'];
+  if(x>=7&&x<=8&&y>=2&&y<=10) return hx('#8a6238'); // stick
+  if(x>=6&&x<=9&&y>=11&&y<=14) return isSoul?hx('#55dcff'):hx('#ffb020'); // flame
+  if(x>=7&&x<=8&&y>=12&&y<=13) return hx('#ffffff'); // flame core
+  return null;
+}
+else if(id==NID.Lantern||id==NID['Soul Lantern']){
+  const isSoul=id==NID['Soul Lantern'];
+  if(x>=7&&x<=8&&y>=13&&y<=15) return hx('#383838'); // ring
+  if(x>=4&&x<=11&&(y==12||y==3)) return hx('#4a4a4a'); // caps
+  if((x==4||x==11)&&y>=4&&y<=11) return hx('#4a4a4a'); // frame
+  if(x>=6&&x<=9&&y>=5&&y<=9) return isSoul?hx('#50d8ff'):hx('#ffa818'); // fire core
+  if(x>=5&&x<=10&&y>=4&&y<=11) return hx('#a8c0cc'); // glass
+  return null;
+}
+else if(id==NID['Oak Button']){
+  if(x>=5&&x<=10&&y>=6&&y<=9){
+    b=hx('#b8905a');
+    if(x==5||y==6) m=1.1;
+    else if(x==10||y==9) m=0.75;
+    return b.map(v=>Math.round(v*m));
+  }
+  return null;
+}
+else if(id==NID['Oak Door']){
+  b=hx('#ab7c48');
+  if(x<=1||x>=14||y<=1||y>=14) m=0.68;
+  else if((x>=4&&x<=11)&&((y>=3&&y<=6)||(y>=8&&y<=12))) m=0.82;
+  if(x==12&&y==7) b=hx('#222222');
+}
+else if(id==NID['Red Bed']){
+  if(y>=4&&y<=12&&x>=2&&x<=13){
+    if(x>=10) return hx('#f8f8f8'); // pillow
+    return hx('#b02e26'); // red blanket
+  }
+  if(y<4&&(x==2||x==3||x==12||x==13)) return hx('#5a3d1e'); // legs
+  return null;
+}
 else if(id==NID['Blast Furnace']){b=hx('#4a4a4a');if(f==2&&x>2&&x<13&&y>5&&y<13){b=y>9?hx('#ff7700'):hx('#1a1a1a');m=1}else if(f==0){b=hx('#363636')}else if((x==1||x==14)&&(y==1||y==14))b=hx('#aaaaaa')}
 else if(id==NID.Smoker){b=hx('#5c442e');if(f==0){b=((x>4&&x<11)&&(y==5||y==10))||((y>4&&y<11)&&(x==5||x==10))?hx('#8a8a8a'):hx('#262626')}else if(f==2&&x>2&&x<13&&y>6&&y<13){b=y>10?hx('#e65c00'):hx('#222222');m=1}}
 else if(id==NID['Oak Sapling']){if(x>=2&&x<=13&&y>=5&&y<=15)return hx('#3fa32b');if((x==7||x==8)&&y<=5)return hx('#6b4f2a');return null}
@@ -1822,7 +1899,11 @@ function render(){
   for(const q of spl){
     const[x,y,z,id]=q,b=light(x,y+1,z);
     if(id==15){pushBox(tri,x+.5,y+.25,z+.5,.5,.25,.5,0,18,b,b,b);pushBox(tri,x+.5,y+.75,z+.75,.5,.25,.25,0,18,b,b,b)}
-    else if(id==16)pushBox(tri,x+.5,y+.09,z+.5,.5,.045,.5,0,18,b,b,b);
+    else if(id==16){
+  const op = doorOpen.has(x + ',' + y + ',' + z);
+  if(op) pushBox(tri, x + .5, y + .5, z + .08, .5, .5, .08, 0, 16 * 3, b, b, b);
+  else pushBox(tri, x + .5, y + .08, z + .5, .5, .08, .5, 0, 16 * 3, b, b, b);
+}
     else if(id==NID.Torch||id==NID['Soul Torch']){pushBox(tri,x+.5,y+.25,z+.5,.05,.25,.05,0,id*3,b,b,b);pushBox(tri,x+.5,y+.58,z+.5,.07,.07,.07,0,0,1.25,1.05,0.45)}
     else if(id==NID.Lantern||id==NID['Soul Lantern']){pushBox(tri,x+.5,y+.22,z+.5,.13,.16,.13,0,id*3,b,b,b);pushBox(tri,x+.5,y+.42,z+.5,.04,.08,.04,0,0,b*.4,b*.4,b*.4)}
     else if(id==NID.Anvil){pushBox(tri,x+.5,y+.12,z+.5,.4,.12,.22,0,id*3,b,b,b);pushBox(tri,x+.5,y+.32,z+.5,.18,.08,.14,0,id*3,b,b,b);pushBox(tri,x+.5,y+.52,z+.5,.42,.12,.28,0,id*3,b,b,b)}
@@ -2395,7 +2476,7 @@ function updMobs(dt){
             mkMob(m.type, bx, by, bz, true);
             spawnDrop(-1, rnd(2, 6), bx, by + 0.5, bz);
             for(let k=0; k<5; k++) spawnDrop(-2, 1, bx + (Math.random()-.5)*0.6, by + 0.8, bz + (Math.random()-.5)*0.6);
-            toast('Baby ' + m.type + ' born! ❤️');
+            
             SFX.pop();
           }
         }
@@ -2707,13 +2788,24 @@ class UniversalNetwork {
   handlePresence(data){
     if(!data.peer) return;
     const now = performance.now();
-    this.peers.set(data.peer, {
-      peer: data.peer,
-      presence: data,
-      lastSeen: now,
-      isMe: false,
-      kb: (this.peers.get(data.peer) || {}).kb || 0
-    });
+    let p = this.peers.get(data.peer);
+    if(!p){
+      p = {
+        peer: data.peer,
+        presence: data,
+        lastSeen: now,
+        isMe: false,
+        kb: 0,
+        curX: data.x, curY: data.y, curZ: data.z,
+        curYaw: data.r || 0, curPitch: data.p || 0,
+        walkAnim: 0
+      };
+      this.peers.set(data.peer, p);
+      this.triggerPeerUpdate();
+    } else {
+      p.presence = data;
+      p.lastSeen = now;
+    }
     this.cleanStalePeers();
   }
   
@@ -2786,6 +2878,9 @@ class UniversalNetwork {
       try { this.client.end(false); } catch(e){}
     }
     this.connected = false;
+  }
+  close(){
+    this.disconnect();
   }
 }
 
@@ -3529,7 +3624,6 @@ else if(e.button==2){
         hitMob.inLove = true;
         hitMob.loveTimer = 30;
         SFX.eat();
-        toast(hitMob.type.toUpperCase() + ' entered love mode! ❤️');
         for(let k = 0; k < 4; k++) spawnDrop(-2, 1, hitMob.p.x + (Math.random() - .5) * 0.5, hitMob.p.y + hitMob.h + 0.3, hitMob.p.z + (Math.random() - .5) * 0.5);
         if(!gameMode){ if(--s.n <= 0) inv[slot] = null; }
         hud();
@@ -3552,7 +3646,7 @@ else if(e.button==2){
     } else {
       tod = 0; dayF = 1; hp = 20;
       toast('Sleeping... The sun rises!');
-      SFX.chest(false);
+      SFX.pop();
     }
     return;
   }
@@ -3565,6 +3659,12 @@ else if(e.button==2){
   }
   const clickedBlock = get(r.x, r.y, r.z);
   if(clickedBlock === 17){ openSignUI(r.x + ',' + r.y + ',' + r.z); return; }
+  if(clickedBlock === 16){
+    const dk = r.x + ',' + r.y + ',' + r.z;
+    if(doorOpen.has(dk)) doorOpen.delete(dk); else doorOpen.add(dk);
+    SFX.click(); dirty = true;
+    return;
+  }
   if(clickedBlock === NID['Oak Button']){
     SFX.click(); toast('*click*');
     const dirs = [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]];
@@ -3624,7 +3724,13 @@ else if(e.button==2){
     setB(r.x,r.y,r.z,NID.Farmland);SFX.dig(2);if(!gameMode&&P[s.id])use(s,1);return;
   }
   if(s&&s.id===NID.Bucket&&(clickedBlock===NID.Water||clickedBlock===NID.Lava)){
-    setB(r.x,r.y,r.z,0);inv[slot]={id:clickedBlock===NID.Water?NID['Water Bucket']:NID['Lava Bucket'],n:1};hud();return;
+    const sk = r.x + ',' + r.y + ',' + r.z;
+    fluidSources.delete(sk);
+    fluidFlowDist.delete(sk);
+    setB(r.x,r.y,r.z,0);
+    inv[slot]={id:clickedBlock===NID.Water?NID['Water Bucket']:NID['Lava Bucket'],n:1};
+    SFX.splash();
+    hud();return;
   }
   if(s && (s.id === NID['Water Bucket'] || s.id === NID['Lava Bucket'])){
     let target = r.pv;
@@ -3634,7 +3740,12 @@ else if(e.button==2){
     }
     if(target){
       const [bx, by, bz] = target;
-      setB(bx, by, bz, s.id === NID['Water Bucket'] ? NID.Water : NID.Lava);
+      const fluidType = s.id === NID['Water Bucket'] ? NID.Water : NID.Lava;
+      setB(bx, by, bz, fluidType);
+      const sk = bx + ',' + by + ',' + bz;
+      fluidSources.add(sk);
+      fluidFlowDist.set(sk, 0);
+      activeFluids.add(sk);
       inv[slot] = { id: NID.Bucket, n: 1 };
       if(s.id === NID['Water Bucket'] && pl.v.y < -2){
         // Water Clutch: cancel fall damage immediately!
@@ -3956,7 +4067,7 @@ setInterval(()=>{
   popMobs();
 }, 200);
 
-// 20 Hz Multiplayer Presence Broadcast (Smooth interpolation & worn armor / held items)
+// 10 Hz Multiplayer Presence Broadcast (Smooth 100ms interval prevents broker queue lag)
 setInterval(()=>{
   if(!playing || !nr) return;
   const isSw = hand.classList.contains("sw") || swingTimer > 0;
@@ -3966,6 +4077,6 @@ setInterval(()=>{
     sw: isSw, n: myName, ip: myPublicIp, crouching: crouch,
     arm: arm.map(a => a ? a.id : 0), held: cur() ? cur().id : 0
   }).catch(()=>{});
-}, 50);
+}, 100);
 applyS();requestAnimationFrame(frame);
 </script></body></html>
