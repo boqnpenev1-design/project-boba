@@ -2349,6 +2349,7 @@ function render(){
       } else { // Facing East (+X)
         pushBox(tri, x + .75, y + .75, z + .5, .25, .25, .5, 0, 18, b, b, b);
       }
+    }
     else if(id==NID['Oak Door']){
       const op = doorOpen.has(x + ',' + y + ',' + z);
       const facing = blockFacing.get(x + ',' + y + ',' + z) || 0;
