@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Boba</title>
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Boba</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script><style>
@@ -299,10 +299,16 @@ mkB('Oak Fence','#b8905a',2,0,1);
 mkB('Oak Fence Gate','#b8905a',2,0,1);NS[NID['Oak Fence Gate']]=1;
 mkB('Farmland','#4e341c',0.6,0,0);
 mkB('Red Bed','#b02e26',0.2,0,1);
+mkB('Oak Slab','#b8905a',1.0,0,1);
+mkB('Cobblestone Slab','#6e6e6e',1.5,4,1);
+mkB('Stone Brick Slab','#7a7a7a',1.5,4,1);
+rcp('Oak Slab', 6, 'ppp', { p: 'Oak Planks' });
+rcp('Cobblestone Slab', 6, 'ccc', { c: 'Cobblestone' });
+rcp('Stone Brick Slab', 6, 'sss', { s: 'Stone Bricks' });
 mkB('Wheat Crops','#7bb04a',0.1,0,1);mkB('Carrot Crops','#ee8a1c',0.1,0,1);mkB('Potato Crops','#c9a35c',0.1,0,1);
 NS[NID['Wheat Crops']]=NS[NID['Carrot Crops']]=NS[NID['Potato Crops']]=1;
-const NON_FULL=new Set([NID.Torch,NID['Soul Torch'],NID.Lantern,NID['Soul Lantern'],NID.Anvil,NID['Oak Button'],NID.Chain,NID['Flower Pot'],NID.Ladder,NID['Oak Door'],NID['Oak Fence'],NID['Oak Fence Gate'],NID['Oak Sapling'],NID['Glass Pane'],NID['Red Bed'],NID['Wheat Crops'],NID['Carrot Crops'],NID['Potato Crops']]);
-TR.add(NID['Oak Sapling']);TR.add(NID['Glass Pane']);TR.add(NID.Glass);TR.add(NID['Oak Door']);TR.add(NID['Oak Fence Gate']);TR.add(NID['Oak Button']);TR.add(NID['Wheat Crops']);TR.add(NID['Carrot Crops']);TR.add(NID['Potato Crops']);TR.add(NID['Red Bed']);
+const NON_FULL=new Set([NID.Torch,NID['Soul Torch'],NID.Lantern,NID['Soul Lantern'],NID.Anvil,NID['Oak Button'],NID.Chain,NID['Flower Pot'],NID.Ladder,NID['Oak Door'],NID['Oak Fence'],NID['Oak Fence Gate'],NID['Oak Sapling'],NID['Glass Pane'],NID['Red Bed'],NID['Oak Slab'],NID['Cobblestone Slab'],NID['Stone Brick Slab'],NID['Wheat Crops'],NID['Carrot Crops'],NID['Potato Crops']]);
+TR.add(NID['Oak Sapling']);TR.add(NID['Glass Pane']);TR.add(NID.Glass);TR.add(NID['Oak Door']);TR.add(NID['Oak Fence Gate']);TR.add(NID['Oak Button']);TR.add(NID['Wheat Crops']);TR.add(NID['Carrot Crops']);TR.add(NID['Potato Crops']);TR.add(NID['Red Bed']);TR.add(NID['Oak Slab']);TR.add(NID['Cobblestone Slab']);TR.add(NID['Stone Brick Slab']);TR.add(NID.Farmland);
 const LIGHT_EMIT=new Set([NID.Torch,NID['Soul Torch'],NID.Lantern,NID['Soul Lantern'],NID.Campfire,NID['Soul Campfire'],NID.Lava]);
 const activeLights={};
 // SPAWN EGGS FOR ALL MOBS
@@ -501,10 +507,10 @@ function drawFirstPersonHand(tri){
   const cBotSleeve = [0.04 * b, 0.40 * b, 0.46 * b];
   const cFist      = [0.74 * b, 0.50 * b, 0.36 * b];
   
-  // Hand tucked in comfortably to bottom-right corner (compact, vanilla Minecraft feel)
-  const bX = 0.38 + bobX - swIn, bY = -0.38 + bobY - swDown, bZ = 0.22 + swFwd;
-  const mX = 0.30 + bobX - swIn, mY = -0.28 + bobY - swDown, mZ = 0.32 + swFwd;
-  const tX = 0.22 + bobX - swIn, tY = -0.20 + bobY - swDown, tZ = 0.44 + swFwd;
+  // Compact, shorter forearm tucked close to body
+  const bX = 0.28 + bobX - swIn, bY = -0.32 + bobY - swDown, bZ = 0.12 + swFwd;
+  const mX = 0.24 + bobX - swIn, mY = -0.25 + bobY - swDown, mZ = 0.18 + swFwd;
+  const tX = 0.20 + bobX - swIn, tY = -0.19 + bobY - swDown, tZ = 0.25 + swFwd;
   
   const hw0 = 0.070, hh0 = 0.070;
   const hw1 = 0.055, hh1 = 0.055;
@@ -986,6 +992,17 @@ ci.addEventListener('keydown',e=>{e.stopPropagation();if(e.key=='Enter'){const v
 function onChat(d){const me=peersList.find(q=>q.isMe);if(d.to&&(!me||d.to!==me.peer))return;const f=String(d.from||'?').slice(0,16),t=String(d.t||'').slice(0,200);chatMsg(d.me?'* '+f+' '+t:d.to?'['+f+' → you] '+t:'<'+f+'> '+t,d.to?'#d9a0ff':null)}
 function onPeers(c){
   peersList=c.peers;
+  if(myPublicIp && playing && !hostIsRunning){
+    const sameIp = c.peers.find(q => !q.isMe && q.presence && q.presence.ip === myPublicIp && pn(q) !== myName);
+    if(sameIp){
+      toast('Kicked: Another player with your IP is already connected.');
+      setTimeout(()=>{
+        if(nr){ nr.disconnect(); nr = null; }
+        show('main'); playing = false; document.exitPointerLock();
+      }, 1000);
+      return;
+    }
+  }
   const duplicate = c.peers.filter(q => !q.isMe && pn(q).toLowerCase() === myName.toLowerCase());
   if(duplicate.length > 0){
     myName = enforceUniqueName(myName);
@@ -1268,7 +1285,7 @@ function genChunk(cx, cz){
   const ch = {
     cx, cz,
     wx: cx * 16, wz: cz * 16,
-    data: new Uint8Array(16 * 16 * H),
+    data: new Uint16Array(16 * 16 * H),
     tp: new Int16Array(16 * 16)
   };
   const wx = ch.wx, wz = ch.wz;
@@ -1510,8 +1527,29 @@ function simWorldPhysics(){
       } else if(b === NID.Lava && below === NID.Water){
         setB(fx, fy - 1, fz, 3);
       } else if(curDist < maxDist && (below !== 0)){
-        // Spreads horizontally only on flat/solid ground
-        const dirs = [[1,0], [-1,0], [0,1], [0,-1]];
+        // 5-block radar check for elevation drops in cardinal directions
+        let targetDirs = [];
+        let minDropDist = 6;
+        const cardDirs = [[1,0], [-1,0], [0,1], [0,-1]];
+        if(isSrc){
+          for(const [cdx, cdz] of cardDirs){
+            for(let step = 1; step <= 5; step++){
+              const sx = fx + cdx * step, sz = fz + cdz * step;
+              const blk = get(sx, fy, sz);
+              if(blk !== 0 && blk !== b) break;
+              if(get(sx, fy - 1, sz) === 0){
+                if(step < minDropDist){
+                  minDropDist = step;
+                  targetDirs = [[cdx, cdz]];
+                } else if(step === minDropDist){
+                  targetDirs.push([cdx, cdz]);
+                }
+                break;
+              }
+            }
+          }
+        }
+        const dirs = targetDirs.length ? targetDirs : cardDirs;
         for(const [dx, dz] of dirs){
           const nx = fx + dx, nz = fz + dz;
           const adj = get(nx, fy, nz);
@@ -1765,6 +1803,25 @@ function rebuild(fullSync){
 }
 function pushBox(a,cx,cy,cz,hx_,hy,hz,rot,k,r,g,b){const c=Math.cos(rot),s=Math.sin(rot);for(let f=0;f<6;f++){const sd=FD[f][4];const vs=FQ[f].map(v=>{const x=(v[0]-.5)*2*hx_,y=(v[1]-.5)*2*hy,z=(v[2]-.5)*2*hz;return[cx+x*c+z*s,cy+y,cz-x*s+z*c]});
 for(const i of[0,1,2,0,2,3]){const v=vs[i];a.push(v[0],v[1],v[2],...tuv(k,UVC[i]),r*sd,g*sd,b*sd)}}}
+function pushBoxRot(a,cx,cy,cz,hx_,hy,hz,yaw,pitch,k,r,g,b){
+  const cyaw=Math.cos(yaw),syaw=Math.sin(yaw);
+  const cpit=Math.cos(pitch),spit=Math.sin(pitch);
+  for(let f=0;f<6;f++){
+    const sd=FD[f][4];
+    const vs=FQ[f].map(v=>{
+      let x=(v[0]-.5)*2*hx_,y=(v[1]-.5)*2*hy,z=(v[2]-.5)*2*hz;
+      let y1=y*cpit - z*spit;
+      let z1=y*spit + z*cpit;
+      let x2=x*cyaw + z1*syaw;
+      let z2=-x*syaw + z1*cyaw;
+      return[cx+x2, cy+y1, cz+z2];
+    });
+    for(const i of[0,1,2,0,2,3]){
+      const v=vs[i];
+      a.push(v[0],v[1],v[2],...tuv(k,UVC[i]),r*sd,g*sd,b*sd);
+    }
+  }
+}
 function face(a,m,z0,d,s,c){
   const sc = m.isBaby ? 0.5 : 1.0;
   const hy = (z0 ? d[1] - .2 : d[1] * .8) * sc;
@@ -1816,6 +1873,7 @@ function renderNametags(){
 
   for(const q of peersList){
     if(q.isMe || !q.presence || q.presence.x == null) continue;
+    if(q.presence.crouching) continue; // Nametag hidden when crouching!
     const x = (q.curX !== undefined ? q.curX : q.presence.x);
     const y = (q.curY !== undefined ? q.curY : q.presence.y) + 2.1;
     const z = (q.curZ !== undefined ? q.curZ : q.presence.z);
@@ -1901,9 +1959,20 @@ function render(){
     if(id==15){pushBox(tri,x+.5,y+.25,z+.5,.5,.25,.5,0,18,b,b,b);pushBox(tri,x+.5,y+.75,z+.75,.5,.25,.25,0,18,b,b,b)}
     else if(id==16){
   const op = doorOpen.has(x + ',' + y + ',' + z);
-  if(op) pushBox(tri, x + .5, y + .5, z + .08, .5, .5, .08, 0, 16 * 3, b, b, b);
-  else pushBox(tri, x + .5, y + .08, z + .5, .5, .08, .5, 0, 16 * 3, b, b, b);
+  const facing = window.doorFacing ? (window.doorFacing.get(x + ',' + y + ',' + z) || 0) : 0;
+  if(op){
+    if(facing === 1) pushBox(tri, x + .92, y + .5, z + .5, .08, .5, .5, 0, 16 * 3, b, b, b);
+    else if(facing === 2) pushBox(tri, x + .08, y + .5, z + .5, .08, .5, .5, 0, 16 * 3, b, b, b);
+    else if(facing === 3) pushBox(tri, x + .5, y + .5, z + .92, .5, .5, .08, 0, 16 * 3, b, b, b);
+    else pushBox(tri, x + .5, y + .5, z + .08, .5, .5, .08, 0, 16 * 3, b, b, b);
+  } else {
+    pushBox(tri, x + .5, y + .08, z + .5, .5, .08, .5, 0, 16 * 3, b, b, b);
+  }
 }
+    else if(id==NID['Oak Slab']||id==NID['Cobblestone Slab']||id==NID['Stone Brick Slab']){
+      const tex = (id==NID['Oak Slab'] ? 6 : id==NID['Cobblestone Slab'] ? 4 : NID['Stone Bricks']) * 3;
+      pushBox(tri, x + .5, y + .25, z + .5, .5, .25, .5, 0, tex, b, b, b);
+    }
     else if(id==NID.Torch||id==NID['Soul Torch']){pushBox(tri,x+.5,y+.25,z+.5,.05,.25,.05,0,id*3,b,b,b);pushBox(tri,x+.5,y+.58,z+.5,.07,.07,.07,0,0,1.25,1.05,0.45)}
     else if(id==NID.Lantern||id==NID['Soul Lantern']){pushBox(tri,x+.5,y+.22,z+.5,.13,.16,.13,0,id*3,b,b,b);pushBox(tri,x+.5,y+.42,z+.5,.04,.08,.04,0,0,b*.4,b*.4,b*.4)}
     else if(id==NID.Anvil){pushBox(tri,x+.5,y+.12,z+.5,.4,.12,.22,0,id*3,b,b,b);pushBox(tri,x+.5,y+.32,z+.5,.18,.08,.14,0,id*3,b,b,b);pushBox(tri,x+.5,y+.52,z+.5,.42,.12,.28,0,id*3,b,b,b)}
@@ -1993,6 +2062,8 @@ function render(){
       x0 = -0.2; x1 = 0.2; z0 = -0.15; z1 = 0.15; y1 = -0.36;
     } else if(sb === NID['Glass Pane']){
       z0 = -0.04; z1 = 0.04;
+    } else if(sb === NID['Oak Slab'] || sb === NID['Cobblestone Slab'] || sb === NID['Stone Brick Slab']){
+      y1 = 0.0;
     } else if(sb === NID['Oak Sapling']){
       x0 = -0.25; x1 = 0.25; z0 = -0.25; z1 = 0.25; y1 = 0.25;
     } else if(sb === NID.Ladder){
@@ -2484,18 +2555,39 @@ function updMobs(dt){
     }
 
     const dx = pl.p.x - m.p.x, dz = pl.p.z - m.p.z, dist = Math.hypot(dx, dz);
-    if(HOST[m.type] && dist < 14){ m.dir = Math.atan2(dx, dz); }
+    
+    // Crop Attraction AI: follow player holding favorite crop
+    const curHolding = cur();
+    const hId = curHolding ? curHolding.id : 0;
+    let attracted = false;
+    if((m.type === 'cow' || m.type === 'sheep') && hId === NID.Wheat) attracted = true;
+    else if(m.type === 'pig' && (hId === NID.Carrot || hId === NID.Potato)) attracted = true;
+    else if(m.type === 'chicken' && hId === NID.Seeds) attracted = true;
+
+    if(attracted && dist < 14 && dist > 1.8){
+      m.dir = Math.atan2(dx, dz);
+    } else if(HOST[m.type] && dist < 14){ m.dir = Math.atan2(dx, dz); }
     else if(m.tm <= 0 && !m.inLove){ m.tm = 1 + Math.random() * 3; m.dir = Math.random() < .4 ? -9 : Math.random() * 6.28; }
     
-    const sp = m.dir == -9 ? 0 : HOST[m.type] ? 2.3 : 1.2;
+    const sp = m.dir == -9 ? 0 : HOST[m.type] ? 2.3 : (attracted ? 2.0 : 1.2);
     if(m.kb > 0) m.kb -= dt;
     else { m.v.x = Math.sin(m.dir) * sp; m.v.z = Math.cos(m.dir) * sp; }
     
-    // Water buoyancy swimming
+    // Water buoyancy & pathfind to dry land
     const inW = get(Math.floor(m.p.x), Math.floor(m.p.y + 0.3), Math.floor(m.p.z)) === NID.Water;
     if(inW){
-      m.v.y = Math.min(3.2, m.v.y + 16 * dt);
+      m.v.y = Math.min(4.8, m.v.y + 22 * dt);
       m.ground = true;
+      const dirs = [[1,0], [-1,0], [0,1], [0,-1]];
+      for(const [cdx, cdz] of dirs){
+        const landB = get(Math.floor(m.p.x + cdx), Math.floor(m.p.y + 0.5), Math.floor(m.p.z + cdz));
+        if(landB && landB !== NID.Water && landB !== NID.Lava){
+          m.dir = Math.atan2(cdx, cdz);
+          m.v.x += cdx * 4 * dt;
+          m.v.z += cdz * 4 * dt;
+          break;
+        }
+      }
     } else {
       m.v.y -= 28 * dt;
     }
@@ -3637,7 +3729,16 @@ else if(e.button==2){
     hud(); return;
   }
   if(s && FOOD[s.id]){
-    if(food < 20){ SFX.eat(); food = Math.min(20, food + FOOD[s.id]); if(!gameMode){ if(--s.n <= 0) inv[slot] = null; } SFX.burp(); hud(); return; }
+    if(food < 20 || s.id === NID['Golden Apple']){
+      SFX.eat();
+      food = Math.min(20, food + FOOD[s.id]);
+      if(s.id === NID['Golden Apple']){
+        hp = Math.min(20, hp + 6);
+        toast('Golden Apple: Full Power!');
+      }
+      if(!gameMode){ if(--s.n <= 0) inv[slot] = null; }
+      SFX.burp(); hud(); return;
+    }
   }
   const r=ray(5);if(r.x==null)return;const id=get(r.x,r.y,r.z),k=r.x+','+r.y+','+r.z;
   if(id===NID['Red Bed']){
@@ -3661,6 +3762,12 @@ else if(e.button==2){
   if(clickedBlock === 17){ openSignUI(r.x + ',' + r.y + ',' + r.z); return; }
   if(clickedBlock === 16){
     const dk = r.x + ',' + r.y + ',' + r.z;
+    if(!window.doorFacing) window.doorFacing = new Map();
+    if(!window.doorFacing.has(dk)){
+      const fwdX = -Math.sin(pl.yaw), fwdZ = -Math.cos(pl.yaw);
+      const face = Math.abs(fwdX) > Math.abs(fwdZ) ? (fwdX > 0 ? 1 : 2) : (fwdZ > 0 ? 3 : 0);
+      window.doorFacing.set(dk, face);
+    }
     if(doorOpen.has(dk)) doorOpen.delete(dk); else doorOpen.add(dk);
     SFX.click(); dirty = true;
     return;
@@ -3725,6 +3832,10 @@ else if(e.button==2){
   }
   if(s&&s.id===NID.Bucket&&(clickedBlock===NID.Water||clickedBlock===NID.Lava)){
     const sk = r.x + ',' + r.y + ',' + r.z;
+    if(!fluidSources.has(sk)){
+      toast('Can only scoop source blocks!');
+      return;
+    }
     fluidSources.delete(sk);
     fluidFlowDist.delete(sk);
     setB(r.x,r.y,r.z,0);
@@ -3938,9 +4049,10 @@ for(const sk in saplings){
   const sp2=saplings[sk];
   if(performance.now()-sp2.time>=360000){growTree(sp2.x,sp2.y,sp2.z);delete saplings[sk];}
 }
-if(leafDecayQueue.length){
+if(leafDecayQueue.length && (!window.lastLeafDecay || performance.now() - window.lastLeafDecay > 1200)){
   const ld=leafDecayQueue[0];
   if(performance.now()>=ld.time){
+    window.lastLeafDecay = performance.now();
     leafDecayQueue.shift();
     if(get(ld.x,ld.y,ld.z)===7){
       setB(ld.x,ld.y,ld.z,0);
@@ -4007,15 +4119,12 @@ bar.classList.remove('hid');bar.firstChild.style.width=Math.min(100,br.t/need*10
 const cNeed = gameMode ? 0 : need;
 if(id!=14&&br.t>=cNeed){
   SFX.breakBlock(id); setB(r.x,r.y,r.z,0);
-  triggerFluidSandUpdate(r.x, r.y, r.z);
   if(id===5){
-    for(let ldx=-3;ldx<=3;ldx++)for(let ldy=-1;ldy<=5;ldy++)for(let ldz=-3;ldz<=3;ldz++){
-      if(get(r.x+ldx,r.y+ldy,r.z+ldz)===7){
-        let hasLog=false;
-        for(let cx4=-2;cx4<=2;cx4++)for(let cy4=-2;cy4<=2;cy4++)for(let cz4=-2;cz4<=2;cz4++){
-          if(get(r.x+ldx+cx4,r.y+ldy+cy4,r.z+ldz+cz4)===5)hasLog=true;
-        }
-        if(!hasLog)leafDecayQueue.push({x:r.x+ldx,y:r.y+ldy,z:r.z+ldz,time:performance.now()+5000*Math.random()+2000});
+    // Lightweight canopy scan (no FPS drops on break, leaves decay slowly over 15-45 seconds)
+    for(let ldx=-2; ldx<=2; ldx++) for(let ldy=0; ldy<=4; ldy++) for(let ldz=-2; ldz<=2; ldz++){
+      if(get(r.x+ldx, r.y+ldy, r.z+ldz) === 7){
+        const decayTime = performance.now() + 15000 + Math.random() * 35000;
+        leafDecayQueue.push({x: r.x+ldx, y: r.y+ldy, z: r.z+ldz, time: decayTime});
       }
     }
   }
@@ -4080,3 +4189,5 @@ setInterval(()=>{
 }, 100);
 applyS();requestAnimationFrame(frame);
 </script></body></html>
+
+
