@@ -1162,17 +1162,6 @@ ci.addEventListener('keydown',e=>{e.stopPropagation();if(e.key=='Enter'){const v
 function onChat(d){const me=peersList.find(q=>q.isMe);if(d.to&&(!me||d.to!==me.peer))return;const f=String(d.from||'?').slice(0,16),t=String(d.t||'').slice(0,200);chatMsg(d.me?'* '+f+' '+t:d.to?'['+f+' → you] '+t:'<'+f+'> '+t,d.to?'#d9a0ff':null)}
 function onPeers(c){
   peersList=c.peers;
-  if(myPublicIp && playing && !hostIsRunning){
-    const sameIp = c.peers.find(q => !q.isMe && q.presence && q.presence.ip === myPublicIp && pn(q) !== myName);
-    if(sameIp){
-      toast('Kicked: Another player with your IP is already connected.');
-      setTimeout(()=>{
-        if(nr){ nr.disconnect(); nr = null; }
-        show('main'); playing = false; document.exitPointerLock();
-      }, 1000);
-      return;
-    }
-  }
   const duplicate = c.peers.filter(q => !q.isMe && pn(q).toLowerCase() === myName.toLowerCase());
   if(duplicate.length > 0){
     myName = enforceUniqueName(myName);
@@ -1794,15 +1783,24 @@ function light(x, y, z){
   let emit = 0;
   for(const lk in activeLights){
     const l = activeLights[lk];
-    const d = Math.hypot(x - l[0], y - l[1], z - l[2]);
-    if(d < l[3]) emit = Math.max(emit, 1.0 - d / l[3]);
+    const r = l[3];
+    const dx = Math.abs(x - l[0]);
+    if(dx >= r) continue;
+    const dz = Math.abs(z - l[2]);
+    if(dz >= r) continue;
+    const dy = Math.abs(y - l[1]);
+    if(dy >= r) continue;
+    const d2 = dx*dx + dy*dy + dz*dz;
+    if(d2 < r * r){
+      emit = Math.max(emit, 1.0 - Math.sqrt(d2) / r);
+    }
   }
   const t = getTop(x, z);
   let amb = 1.0;
   if(y < 20){
     amb = Math.max(0.15, 0.7 * Math.pow(0.82, Math.max(0, 20 - y)));
   } else if(y < t){
-    amb = 0.85; // Buildings and houses with roofs remain bright daylight inside!
+    amb = 0.85;
   }
   return Math.min(1.2, Math.max(amb, emit * 1.25));
 }
@@ -2141,7 +2139,10 @@ function rebuild(fullSync){
     }
   }
 
-  const combined = new Float32Array(totalLen);
+  if(!window.globalMeshBuf || window.globalMeshBuf.length < totalLen){
+    window.globalMeshBuf = new Float32Array(Math.max(totalLen, (window.globalMeshBuf ? window.globalMeshBuf.length * 2 : 262144)));
+  }
+  const combined = window.globalMeshBuf.subarray(0, totalLen);
   spl.length = 0;
   let offset = 0;
   for(let i = 0; i < activeChunks.length; i++){
@@ -2156,7 +2157,7 @@ function rebuild(fullSync){
   }
 
   gl.bindBuffer(gl.ARRAY_BUFFER, wbuf);
-  gl.bufferData(gl.ARRAY_BUFFER, combined, gl.STATIC_DRAW);
+  gl.bufferData(gl.ARRAY_BUFFER, combined, gl.DYNAMIC_DRAW);
   wcount = totalLen / 8;
   dirty = false;
 }
@@ -2348,8 +2349,16 @@ function render(){
       } else { // Facing East (+X)
         pushBox(tri, x + .75, y + .75, z + .5, .25, .25, .5, 0, 18, b, b, b);
       }
+    else if(id==NID['Oak Door']){
+      const op = doorOpen.has(x + ',' + y + ',' + z);
+      const facing = blockFacing.get(x + ',' + y + ',' + z) || 0;
+      const spansX = (facing === 0 || facing === 2) ? (!op) : (op);
+      if(spansX){
+        pushBox(tri, x + .5, y + .5, op ? z + .94 : z + .06, .48, .5, .06, 0, id * 3, b, b, b);
+      } else {
+        pushBox(tri, op ? x + .94 : x + .06, y + .5, z + .5, .06, .5, .48, 0, id * 3, b, b, b);
+      }
     }
-    else if(id==NID['Oak Door']){const op=doorOpen.has(x+','+y+','+z);pushBox(tri,op?x+.06:x+.5,y+.5,op?z+.5:z+.06,op?.06:.5,.5,op?.5:.06,0,id*3,b,b,b)}
     else if(id==NID['Oak Fence']){
       pushBox(tri, x + .5, y + .5, z + .5, .08, .5, .08, 0, id * 3, b, b, b);
       const connNegX = get(x - 1, y, z) === NID['Oak Fence'] || get(x - 1, y, z) === NID['Oak Fence Gate'];
@@ -2992,7 +3001,9 @@ function hit(p,w,h){
       if(p.y < y + 0.5 && (p.y + h) > y) return true;
       continue;
     }
-    if(!NS[q]) return true;
+    if(!NS[q]){
+      if(p.y < y + 1.0 && (p.y + h) > y) return true;
+    }
   }
   return false;
 }
@@ -4666,6 +4677,17 @@ else if(e.button==2){
     if(y < H - 1 && get(x, y + 1, z) === 0){
       setB(x, y, z, NID['Oak Door']);
       setB(x, y + 1, z, NID['Oak Door']);
+      const fwdX = -Math.sin(pl.yaw), fwdZ = -Math.cos(pl.yaw);
+      let cardinal = 0;
+      if(Math.abs(fwdX) > Math.abs(fwdZ)){
+        cardinal = (fwdX < 0) ? 1 : 3;
+      } else {
+        cardinal = (fwdZ > 0) ? 0 : 2;
+      }
+      blockFacing.set(x + ',' + y + ',' + z, cardinal);
+      blockFacing.set(x + ',' + (y + 1) + ',' + z, cardinal);
+      doorOpen.delete(x + ',' + y + ',' + z);
+      doorOpen.delete(x + ',' + (y + 1) + ',' + z);
       SFX.place(s.id);
       if(!gameMode){ if(--s.n <= 0) inv[slot] = null; }
       hud(); return;
