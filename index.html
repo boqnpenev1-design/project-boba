@@ -1479,7 +1479,7 @@ function stampVillageStructures(ch){
       fill(vx - 14, vy + 1, vz + 10, vx - 9, vy + 3, vz + 10, 4);
       fill(vx - 14, vy + 1, vz + 6, vx - 14, vy + 3, vz + 9, 4);
       put(vx - 12, vy + 1, vz + 10, 0); put(vx - 12, vy + 2, vz + 10, 0); // Entry
-      put(vx - 13, vy + 1, vz + 7, NID.Lava); // Lava pit
+      put(vx - 13, vy + 1, vz + 7, NID.Water); // Replaced lava with water to prevent glitching
       put(vx - 13, vy + 1, vz + 8, NID['Iron Bars']);
       put(vx - 11, vy + 1, vz + 6, 12); // Furnace
       put(vx - 10, vy + 1, vz + 6, NID['Blast Furnace']);
@@ -2531,6 +2531,7 @@ function render(){
   // Render Remote Players (Smooth Lerp + Detailed 3D Model with Arms, Eyes, Mouth, Walking, Attacking Swing)
   for(const q of peersList){
     if(q.isMe || !q.presence || q.presence.x == null) continue;
+    if(q.presence.dead) continue; // Dead players are not rendered standing
     const pDistSq = (q.presence.x - pl.p.x)**2 + (q.presence.z - pl.p.z)**2;
     if(pDistSq > 3600) continue; // Distance-cull 3D player models beyond 60 blocks!
     
@@ -2565,7 +2566,7 @@ function render(){
   }
 
   // Render Own Player Model in 3rd person
-  ownBody(tri);
+  if(!dead) ownBody(tri);
 
   bind(dbuf);
   if(tri.length){
@@ -3393,7 +3394,7 @@ function updMobs(dt){
       }
     }
     
-    if(HOST[m.type] && dist < 1.4 && Math.abs(pl.p.y - m.p.y) < 1.5 && m.atk <= 0){
+    if(!dead && HOST[m.type] && dist < 1.4 && Math.abs(pl.p.y - m.p.y) < 1.5 && m.atk <= 0){
       m.atk = 1;
       hp -= Math.max(.5, ({zombie:5,skeleton:4,creeper:7,spider:3}[m.type] || 3) * (1 - .04 * DEF()));
       hurtArmor(); pl.v.x += dx * 3; pl.v.z += dz * 3;
@@ -3489,6 +3490,7 @@ function attack(){
   // 2. Raycast against Remote Players (PvP)
   for(const q of peersList){
     if(q.isMe || !q.presence || q.presence.x == null) continue;
+    if(q.presence.dead) continue; // Cannot attack dead players!
     const qpos = new THREE.Vector3(q.presence.x, q.presence.y + 0.9, q.presence.z);
     const c = qpos.clone().sub(o), t = c.dot(d);
     if(t > 0 && t < bt && c.sub(d.clone().multiplyScalar(t)).length() < 0.65){
@@ -3536,6 +3538,7 @@ function attack(){
 }
 
 function onPvPHit(pkt){
+  if(dead || hp <= 0) return; // Dead players cannot take PvP damage
   const me = peersList.find(q => q.isMe);
   const myId = me ? me.peer : myPeerId;
   if(!pkt || pkt.target !== myId) return;
@@ -3671,12 +3674,25 @@ class UniversalNetwork {
           } else if(channel === 'sync_world'){
             if(data && data.edits && Array.isArray(data.edits)){
               data.edits.forEach(([k, v]) => {
+                edits.set(k, v);
                 const [x, y, z] = k.split(',').map(Number);
-                setB(x, y, z, v, true);
+                const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
+                const ch = chunks.get(cx + ',' + cz);
+                if(ch){
+                  const lx = (x % 16 + 16) % 16, lz = (z % 16 + 16) % 16;
+                  ch.data[lx + lz * 16 + y * 256] = v;
+                  ch.dirty = true;
+                }
+                if(LIGHT_EMIT.has(v)) registerLight(x, y, z, v === NID.Lava ? 12 : 9);
+                else if(v === 0) unregisterLight(x, y, z);
               });
+              dirty = true;
             }
             if(data && data.chests) Object.assign(chests, data.chests);
             if(data && data.furn) Object.assign(furn, data.furn);
+          } else if(channel === 'reset_world'){
+            edits.clear(); chunks.clear(); for(const k in chests) delete chests[k]; for(const k in furn) delete furn[k];
+            dirty = true; rebuild(true); toast('Server world reset by admin');
           } else {
             this.dispatch(channel, data);
           }
@@ -3933,9 +3949,23 @@ const Host9A = {
   },
   
   resetServer(){
+    // Kick all connected players with explanation
+    if(this.net && this.net.connected){
+      for(const [k, v] of this.net.peers){
+        const victimName = (v.presence && v.presence.n) ? v.presence.n : pn(v);
+        this.net.emit('kick', { target: v.peer, name: victimName, reason: 'World was reset by admin. Please rejoin!' }).catch(()=>{});
+      }
+      this.net.peers.clear();
+      this.net.cleanStalePeers();
+      this.net.emit('reset_world', {}).catch(()=>{});
+      this.net.emit('sync_world', { edits: [], chests: {}, furn: {} }).catch(()=>{});
+      this.net.emit('chat', { from: '[SERVER]', t: 'Server 9A world has been reset to brand new wilderness!', col: '#2ecc71' }).catch(()=>{});
+    }
     try {
       localStorage.removeItem('boba_save_server_9a');
       localStorage.removeItem('boba_pos_server_9a');
+      localStorage.removeItem('boba_chests_server_9a');
+      localStorage.removeItem('boba_furn_server_9a');
     } catch(e){}
     edits.clear();
     chunks.clear();
@@ -3945,12 +3975,10 @@ const Host9A = {
     for(let i = 0; i < 36; i++) inv[i] = null;
     for(let i = 0; i < 4; i++) arm[i] = null;
     hp = 20; food = 20; savedPos = null;
-    if(this.net && this.net.client){
-      this.net.emit('sync_world', { edits: [], chests: {}, furn: {} }).catch(()=>{});
-      this.net.emit('chat', { from: '[SERVER]', t: 'Server 9A world has been reset to brand new wilderness!', col: '#2ecc71' }).catch(()=>{});
-    }
-    Host9A.log('warn', 'Server 9A world has been completely reset to fresh wilderness.');
-    toast('Server 9A reset successfully');
+    dirty = true;
+    rebuild(true);
+    Host9A.log('warn', 'All players kicked and Server 9A world completely reset.');
+    toast('Server 9A reset: all players kicked');
   },
   
   joinAsPlayer(){
@@ -4219,9 +4247,42 @@ async function join9A(){
   
   nr = new UniversalNetwork('9a', false);
   
-  nr.on('blk', d => {
+  const peerBlkRate = new Map();
+  nr.on('blk', (d, sender) => {
+    if(!d || d.y == null || d.x == null || d.z == null) return;
+    if(d.y < 0 || d.y >= H || d.x < MIN_COORD || d.x > MAX_COORD || d.z < MIN_COORD || d.z > MAX_COORD) return;
+    if(d.id < 0 || d.id > 150) return;
+    
+    // Anti-Nuke Rate Limiting per peer
+    const pId = sender || d.sender || 'unknown';
+    const now = performance.now();
+    let r = peerBlkRate.get(pId);
+    if(!r || now - r.reset > 1000){ r = { count: 0, reset: now }; peerBlkRate.set(pId, r); }
+    r.count++;
+    if(r.count > 16){
+      if(r.count === 17) Host9A.log('warn', 'Anti-Nuke: Block rate limit exceeded by peer.');
+      if(r.count > 35 && nr && nr.peers.has(pId)){
+        const peerObj = nr.peers.get(pId);
+        const pName = (peerObj && peerObj.presence && peerObj.presence.n) ? peerObj.presence.n : 'Nuker';
+        nr.emit('kick', { target: pId, name: pName, reason: 'Anti-Nuke: Excessive block manipulation.' }).catch(()=>{});
+        nr.peers.delete(pId);
+        nr.cleanStalePeers();
+        Host9A.log('warn', 'Auto-kicked ' + pName + ' for nuking.');
+      }
+      return; // Drop packet
+    }
+
+    // Distance reach validation (max 9.5 blocks reach)
+    if(nr && nr.peers.has(pId)){
+      const pObj = nr.peers.get(pId);
+      if(pObj && pObj.presence && pObj.presence.x != null){
+        const distSq = (d.x - pObj.presence.x)**2 + (d.y - pObj.presence.y)**2 + (d.z - pObj.presence.z)**2;
+        if(distSq > 90) return; // Drop reach hacked block edit
+      }
+    }
+
     setB(d.x, d.y, d.z, d.id, true);
-    saveWorldData('server_9a');
+    scheduleSaveWorldData('server_9a');
   });
   
   // When another player needs world edits, share them
@@ -4309,11 +4370,27 @@ async function joinMP(){
   
   nr = new UniversalNetwork(code, false);
   nr.on('blk', d => setB(d.x, d.y, d.z, d.id, true));
-  nr.on('need', () => { if(edits.size) nr.emit('edits', [...edits]).catch(()=>{}); });
-  nr.on('edits', a => a.forEach(([k, v]) => {
-    const [x, y, z] = k.split(',').map(Number);
-    setB(x, y, z, v, true);
-  }));
+    nr.on('need', () => {
+    const isMeshHost = hostIsRunning || (!nr) || (peersList.length === 0) || (peersList.every(p => myPeerId <= p.peer));
+    if(isMeshHost && edits.size) nr.emit('edits', [...edits]).catch(()=>{});
+  });
+  nr.on('edits', a => {
+    if(!Array.isArray(a)) return;
+    a.forEach(([k, v]) => {
+      edits.set(k, v);
+      const [x, y, z] = k.split(',').map(Number);
+      const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
+      const ch = chunks.get(cx + ',' + cz);
+      if(ch){
+        const lx = (x % 16 + 16) % 16, lz = (z % 16 + 16) % 16;
+        ch.data[lx + lz * 16 + y * 256] = v;
+        ch.dirty = true;
+      }
+      if(LIGHT_EMIT.has(v)) registerLight(x, y, z, v === NID.Lava ? 12 : 9);
+      else if(v === 0) unregisterLight(x, y, z);
+    });
+    dirty = true;
+  });
   nr.on('chat', onChat); nr.on('sign_sync', d => { if(d && d.key) signs[d.key] = d.lines; });
   nr.on('drop_spawn', d => {
     if(!drops.some(q => q.uid === d.uid)){
@@ -4501,6 +4578,15 @@ function deleteSelectedWorld(){
 }
 
 let savedPos = null;
+let _saveDebounceTimer = null;
+function scheduleSaveWorldData(wid){
+  if(_saveDebounceTimer) return;
+  _saveDebounceTimer = setTimeout(() => {
+    _saveDebounceTimer = null;
+    saveWorldData(wid);
+  }, 2500);
+}
+
 function saveWorldData(wid){
   if(!wid || !playing) return;
   try {
@@ -5242,6 +5328,7 @@ setInterval(()=>{
     x: +pl.p.x.toFixed(2), y: +pl.p.y.toFixed(2), z: +pl.p.z.toFixed(2),
     r: +pl.yaw.toFixed(2), p: +pl.pitch.toFixed(2),
     sw: isSw, n: myName, ip: myPublicIp, dev: myDeviceId, crouching: crouch,
+    dead: !!dead,
     arm: arm.map(a => a ? a.id : 0), held: cur() ? cur().id : 0
   }).catch(()=>{});
 }, 100);
