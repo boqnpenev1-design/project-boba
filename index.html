@@ -1364,7 +1364,8 @@ function getChunk(cx, cz){
 
 function getTop(x, z){
   const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
-  const ch = chunks.get(cx + ',' + cz) || getChunk(cx, cz);
+  const ch = chunks.get(cx + ',' + cz);
+  if(!ch) return Math.max(22, Math.min(36, hg(x, z)));
   const lx = (x % 16 + 16) % 16, lz = (z % 16 + 16) % 16;
   return ch.tp[lx + lz * 16] || 25;
 }
@@ -1374,7 +1375,8 @@ function get(x, y, z){
   if(y >= H) return 0;
   if(x < MIN_COORD || x > MAX_COORD || z < MIN_COORD || z > MAX_COORD) return 14;
   const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
-  const ch = chunks.get(cx + ',' + cz) || getChunk(cx, cz);
+  const ch = chunks.get(cx + ',' + cz);
+  if(!ch) return 0;
   const lx = (x % 16 + 16) % 16, lz = (z % 16 + 16) % 16;
   return ch.data[lx + lz * 16 + y * 256];
 }
@@ -1905,8 +1907,11 @@ function registerLight(x, y, z, pwr=10){
   activeLightsList = Object.values(activeLights);
 }
 function unregisterLight(x, y, z){
-  delete activeLights[x + ',' + y + ',' + z];
-  activeLightsList = Object.values(activeLights);
+  const k = x + ',' + y + ',' + z;
+  if(activeLights[k]){
+    delete activeLights[k];
+    activeLightsList = Object.values(activeLights);
+  }
 }
 function clearAllLights(){
   for(const k in activeLights) delete activeLights[k];
@@ -2477,13 +2482,18 @@ function rebuild(fullSync){
   activeChunks = [];
   let totalLen = 0;
   let meshesBuilt = 0;
+  const maxMeshes = fullSync ? 49 : 2;
   for(let cz = pcz - CH_RADIUS; cz <= pcz + CH_RADIUS; cz++){
     for(let cx = pcx - CH_RADIUS; cx <= pcx + CH_RADIUS; cx++){
       const ch = getChunk(cx, cz);
       activeChunks.push(ch);
       if(ch.dirty || !ch.mesh){
-        buildChunkMesh(ch);
-        meshesBuilt++;
+        if(meshesBuilt < maxMeshes){
+          buildChunkMesh(ch);
+          meshesBuilt++;
+        } else {
+          dirty = true;
+        }
       }
       if(ch.mesh) totalLen += ch.mesh.length;
     }
@@ -3094,7 +3104,7 @@ function setB(x,y,z,id,net,facing){
   triggerFluidSandUpdate(x, y, z);
   if(!net && nr){
     const fVal = blockFacing.get(bk);
-    nr.emit('blk', {x, y, z, id, facing: fVal}).catch(()=>{});
+    nr.emit('blk', {x, y, z, id, facing: fVal, sender: myPeerId}).catch(()=>{});
   }
 }
 
@@ -3587,12 +3597,22 @@ function ray(max){const o=cam.position,d=new THREE.Vector3();cam.getWorldDirecti
 const mobs=[],HUM={zombie:1,skeleton:1,creeper:1,villager:1},HOST={zombie:1,skeleton:1,creeper:1,spider:1},MD={zombie:[.6,1.8,'#2f8f8f','#5aa04a',20],skeleton:[.6,1.8,'#cfcfcf','#e6e6e6',20],creeper:[.6,1.7,'#3f9f3f','#4fbf4f',20],spider:[1.2,.8,'#2a2a2a','#4a2a2a',16],pig:[.9,.9,'#f0a0a8','#f0a0a8',10],cow:[.9,1.4,'#4b3a2a','#e8e8e8',10],sheep:[.9,1.3,'#e8e4d8','#f5f0e8',8],chicken:[.5,.7,'#f0f0f0','#e8d8b0',4],villager:[.6,1.95,'#8a5e3b','#c68a62',20]};
 function mkMob(type,x,y,z,isBaby=false){const d=MD[type]||[.6,1.8,'#fff','#fff',20],sc=isBaby?0.5:1,m={type,p:new V3(x,y,z),v:new V3(),hp:d[4],dir:0,tm:0,w:(d[0]/2)*sc,h:d[1]*sc,atk:0,ry:0,isBaby:!!isBaby,inLove:false,loveTimer:0,breedCd:0,step:true};mobs.push(m);return m;}
 const DROP={zombie:()=>[[28,rnd(0,2)],[22,Math.random()<.03?1:0]],pig:()=>[[26,rnd(1,3)]],cow:()=>[[27,rnd(1,3)],[31,rnd(0,2)]],sheep:()=>[[NID['Raw Mutton'],rnd(1,2)],[NID['White Wool'],1]],chicken:()=>[[NID['Raw Chicken'],1],[NID.Feather,rnd(0,2)]],skeleton:()=>[[NID.Bone,rnd(0,2)]],creeper:()=>[[NID.Gunpowder,rnd(0,2)]],spider:()=>[[NID.String,rnd(0,2)],[NID['Spider Eye'],Math.random()<.3?1:0]]},rnd=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+let lastMobsSyncRecv = 0;
+const deadMobIds = new Set();
+
+function isLocalMobAuthority(){
+  if(!nr) return true;
+  const playingPeers = peersList.filter(p => p.isMe ? (playing && !dead) : (p.presence && p.presence.x != null && !p.presence.dead));
+  if(playingPeers.length <= 1) return true;
+  if(performance.now() - lastMobsSyncRecv > 2200) return true;
+  return playingPeers.every(p => myPeerId <= p.peer);
+}
+
 function syncMobsMultiplayer(){
   if(!playing || !nr) return;
-  const isMeshHost = hostIsRunning || (peersList.length === 0) || (peersList.every(p => myPeerId <= p.peer));
-  if(isMeshHost){
+  if(isLocalMobAuthority()){
     const mobData = mobs.map(m => ({
-      id: m.id || (m.id = Math.random().toString(36).slice(2)),
+      id: m.id || (m.id = 'm_' + Math.random().toString(36).slice(2, 8)),
       type: m.type,
       x: +m.p.x.toFixed(2),
       y: +m.p.y.toFixed(2),
@@ -3604,16 +3624,17 @@ function syncMobsMultiplayer(){
     nr.emit('mobs_sync', mobData).catch(()=>{});
   }
 }
-setInterval(syncMobsMultiplayer, 400);
+setInterval(syncMobsMultiplayer, 350);
+
 function popMobs(){
-  const isMeshHost = hostIsRunning || (!nr) || (peersList.length === 0) || (peersList.every(p => myPeerId <= p.peer));
-  if(nr && !isMeshHost) return;
+  if(!playing || dead) return;
+  if(!isLocalMobAuthority()) return;
 
   const targetPlayers = [];
   if(playing && !dead) targetPlayers.push(pl.p);
   if(peersList && peersList.length){
     for(const q of peersList){
-      if(!q.isMe && q.presence && q.presence.x != null){
+      if(!q.isMe && q.presence && q.presence.x != null && !q.presence.dead){
         targetPlayers.push({ x: q.presence.x, y: q.presence.y, z: q.presence.z });
       }
     }
@@ -3639,19 +3660,19 @@ function popMobs(){
   const passiveCount = mobs.filter(m => !HOST[m.type]).length;
   const hostileCount = mobs.filter(m => HOST[m.type]).length;
 
-  const passiveList = [['pig', 8], ['cow', 8], ['sheep', 8], ['chicken', 8]];
-  const hostileList = [['zombie', 10], ['skeleton', 8], ['creeper', 7], ['spider', 7]];
+  const passiveList = [['pig', 14], ['cow', 14], ['sheep', 14], ['chicken', 14]];
+  const hostileList = [['zombie', 16], ['skeleton', 14], ['creeper', 12], ['spider', 12]];
 
-  // 1. Passive Animals Spawn around all players (cap 34)
-  if(passiveCount < 34){
+  // 1. Passive Animals Spawn around players (higher daytime cap 54)
+  if(passiveCount < 54){
     for(const tp of targetPlayers){
       for(const [t, targetN] of passiveList){
         const curTypeCount = mobs.filter(m => m.type === t).length;
         if(curTypeCount < targetN){
-          const packSize = Math.floor(Math.random() * 2) + 2;
-          const centerX = Math.floor(tp.x + rnd(-35, 35));
-          const centerZ = Math.floor(tp.z + rnd(-35, 35));
-          if(Math.hypot(centerX - tp.x, centerZ - tp.z) > 10){
+          const packSize = Math.floor(Math.random() * 3) + 2;
+          const centerX = Math.floor(tp.x + rnd(-32, 32));
+          const centerZ = Math.floor(tp.z + rnd(-32, 32));
+          if(Math.hypot(centerX - tp.x, centerZ - tp.z) > 7){
             for(let p = 0; p < packSize; p++){
               const sx = centerX + Math.floor(rnd(-3, 3));
               const sz = centerZ + Math.floor(rnd(-3, 3));
@@ -3660,8 +3681,9 @@ function popMobs(){
                 const bGround = get(sx, sy, sz);
                 const bAir1 = get(sx, sy + 1, sz);
                 const bAir2 = get(sx, sy + 2, sz);
-                if((bGround === 1 || bGround === 2) && bAir1 === 0 && bAir2 === 0){
-                  mkMob(t, sx + 0.5, sy + 1.05, sz + 0.5);
+                if((bGround === 1 || bGround === 2 || bGround === 8) && (!bAir1 || NS[bAir1]) && (!bAir2 || NS[bAir2])){
+                  const m = mkMob(t, sx + 0.5, sy + 1.05, sz + 0.5);
+                  m.id = 'm_' + Math.random().toString(36).slice(2, 8);
                 }
               }
             }
@@ -3671,25 +3693,34 @@ function popMobs(){
     }
   }
 
-  // 2. Hostile Mobs Spawn around all players (cap 32)
-  if(hostileCount < 32){
+  // 2. Hostile Mobs Spawn around players (higher nighttime cap 50)
+  if(hostileCount < 50){
     for(const tp of targetPlayers){
       for(const [t, targetN] of hostileList){
         const curTypeCount = mobs.filter(m => m.type === t).length;
         if(curTypeCount < targetN){
-          for(let att = 0; att < 6; att++){
-            const x = Math.floor(tp.x + rnd(-40, 40));
-            const z = Math.floor(tp.z + rnd(-40, 40));
-            if(Math.hypot(x - tp.x, z - tp.z) > 12){
-              if(dayF < 0.55){
-                // Nighttime: surface spawn on solid blocks in darkness
+          const isNight = dayF < 0.6;
+          const maxAtt = isNight ? 16 : 8;
+          for(let att = 0; att < maxAtt; att++){
+            const x = Math.floor(tp.x + rnd(-36, 36));
+            const z = Math.floor(tp.z + rnd(-36, 36));
+            const dPlayer = Math.hypot(x - tp.x, z - tp.z);
+            if(dPlayer > 8 && dPlayer < 42){
+              if(isNight){
+                // Nighttime: surface spawn in darkness, groups of 1-3
                 const sy = getTop(x, z);
                 if(sy >= 10 && sy < H - 2){
                   const bGround = get(x, sy, z);
                   const bAir1 = get(x, sy + 1, z);
                   const bAir2 = get(x, sy + 2, z);
-                  if(bGround !== 0 && bGround !== NID.Water && bGround !== NID.Lava && !NS[bGround] && bAir1 === 0 && bAir2 === 0){
-                    mkMob(t, x + 0.5, sy + 1.05, z + 0.5);
+                  if(bGround !== 0 && bGround !== NID.Water && bGround !== NID.Lava && !NS[bGround] && (!bAir1 || NS[bAir1]) && (!bAir2 || NS[bAir2])){
+                    const pack = (t === 'zombie' || t === 'spider') ? (Math.random() < 0.4 ? 2 : 1) : 1;
+                    for(let pk = 0; pk < pack; pk++){
+                      const px_ = x + (pk === 0 ? 0 : rnd(-2, 2)), pz_ = z + (pk === 0 ? 0 : rnd(-2, 2));
+                      const py_ = getTop(px_, pz_);
+                      const m = mkMob(t, px_ + 0.5, py_ + 1.05, pz_ + 0.5);
+                      m.id = 'm_' + Math.random().toString(36).slice(2, 8);
+                    }
                     break;
                   }
                 }
@@ -3700,8 +3731,9 @@ function popMobs(){
                   const bGround = get(x, sy, z);
                   const bAir1 = get(x, sy + 1, z);
                   const bAir2 = get(x, sy + 2, z);
-                  if(bGround !== 0 && bGround !== NID.Water && bGround !== NID.Lava && !NS[bGround] && bAir1 === 0 && bAir2 === 0){
-                    mkMob(t, x + 0.5, sy + 1.05, z + 0.5);
+                  if(bGround !== 0 && bGround !== NID.Water && bGround !== NID.Lava && !NS[bGround] && (!bAir1 || NS[bAir1]) && (!bAir2 || NS[bAir2])){
+                    const m = mkMob(t, x + 0.5, sy + 1.05, z + 0.5);
+                    m.id = 'm_' + Math.random().toString(36).slice(2, 8);
                     break;
                   }
                 }
@@ -3824,6 +3856,7 @@ function updMobs(dt){
   for(let i=mobs.length-1; i>=0; i--){
     if(mobs[i].hp <= 0){
       const m = mobs[i];
+      if(m.id) deadMobIds.add(m.id);
       if(m.p.y > -5){
         for(const[id,n] of (DROP[m.type] ? DROP[m.type]() : [])) if(n) spawnDrop(id, n, m.p.x, m.p.y + .5, m.p.z);
         spawnDrop(-1, HOST[m.type] ? 5 : rnd(1, 3), m.p.x, m.p.y + .5, m.p.z);
@@ -3946,10 +3979,23 @@ function attack(){
     const dm = s && P[s.id] ? P[s.id][4] : 1;
     bestMob.hp -= dm;
     if(s && P[s.id]) use(s, P[s.id][2] == 3 ? 1 : 2);
-    bestMob.kb = .3;
+    bestMob.kb = .35;
     bestMob.v.x = d.x * 6;
     bestMob.v.z = d.z * 6;
     bestMob.v.y = 5;
+    SFX.hit();
+    if(bestMob.hp <= 0 && bestMob.id){
+      deadMobIds.add(bestMob.id);
+    }
+    if(nr){
+      nr.emit('mob_damage', {
+        id: bestMob.id,
+        dmg: dm,
+        hp: bestMob.hp,
+        kx: d.x * 6,
+        kz: d.z * 6
+      }).catch(()=>{});
+    }
     return true;
   }
   return false;
@@ -4126,7 +4172,7 @@ class UniversalNetwork {
             } else if(data && data.name && data.name !== 'all'){
               chatMsg('[Server] ' + data.name + ' was kicked by the host.', '#f39c12');
             }
-            this.dispatch(channel, data);
+            this.dispatch(channel, data, raw.sender);
           } else if(channel === 'sync_world'){
             // If targeted to a specific incoming peer, all existing peers ignore it completely!
             if(data && data.target && data.target !== this.peerId) return;
@@ -4158,7 +4204,7 @@ class UniversalNetwork {
             if(data && data.furn) Object.assign(furn, data.furn);
 
           } else {
-            this.dispatch(channel, data);
+            this.dispatch(channel, data, raw.sender);
           }
         } catch(e){}
       });
@@ -4224,9 +4270,9 @@ class UniversalNetwork {
     this.handlers.get(event).push(cb);
   }
   
-  dispatch(event, data){
+  dispatch(event, data, sender){
     const list = this.handlers.get(event);
-    if(list) list.forEach(cb => { try { cb(data); } catch(e){} });
+    if(list) list.forEach(cb => { try { cb(data, sender); } catch(e){} });
   }
   
   async emit(event, data){
@@ -4295,10 +4341,20 @@ function updateServerStatusBadge(data){
   }
 }
 
+let _saveDebounceTimer = null;
+function queueSaveWorldData(wid, delay = 2500){
+  if(_saveDebounceTimer) return;
+  _saveDebounceTimer = setTimeout(() => {
+    _saveDebounceTimer = null;
+    saveWorldData(wid);
+  }, delay);
+}
+
 // ---------- Aternos Server Host Controller ----------
 const Host9A = {
   net: null,
   tpsInterval: null,
+  timeSyncInterval: null,
   
   start(){
     if(hostIsRunning) return;
@@ -4324,12 +4380,19 @@ const Host9A = {
         chests,
         furn
       }).catch(()=>{});
+      this.net.emit('time_sync', { tod, dayF }).catch(()=>{});
     });
     
     this.net.on('blk', d => {
       setB(d.x, d.y, d.z, d.id, true, d.facing);
-      saveWorldData('server_9a');
+      queueSaveWorldData('server_9a');
     });
+    
+    clearInterval(this.timeSyncInterval);
+    this.timeSyncInterval = setInterval(() => {
+      if(!hostIsRunning || !this.net || !this.net.connected) return;
+      this.net.emit('time_sync', { tod, dayF }).catch(()=>{});
+    }, 4000);
     
     this.net.on('chat', d => {
       Host9A.log('info', '<' + (d.from || 'Player') + '> ' + (d.t || ''));
@@ -4362,6 +4425,7 @@ const Host9A = {
   
   stop(){
     if(!hostIsRunning) return;
+    clearInterval(this.timeSyncInterval);
     hostIsRunning = false;
     Host9A.log('warn', 'Stopping 9A server...');
     if(this.net && this.net.client){
@@ -4494,9 +4558,15 @@ const Host9A = {
       if(!found){ Host9A.log('warn', 'Player "' + targetName + '" not found.'); return; }
       const isCreative = (modeStr === 'creative' || modeStr === '1' || modeStr === 'c');
       this.net.emit('cmd_gamemode', { target: found.peer, mode: isCreative ? 1 : 0 });
-      Host9A.log('info', 'Set ' + targetName + ' to ' + (isCreative ? 'Creative' : 'Survival'));
     } else if(op === '/day' || op === '/night'){
-      Host9A.log('warn', 'Time commands /day and /night are disabled in multiplayer.');
+      const isDay = (op === '/day');
+      const newTod = Math.floor(tod / 480) * 480 + (isDay ? 60 : 360);
+      tod = newTod;
+      dayF = isDay ? 1 : 0;
+      if(this.net && this.net.connected){
+        this.net.emit('time_sync', { tod: newTod, dayF: dayF, msg: isDay ? 'Time set to day' : 'Time set to night' }).catch(()=>{});
+      }
+      Host9A.log('info', 'Time set to ' + (isDay ? 'Day' : 'Night'));
     } else {
       Host9A.log('warn', 'Unknown command. Available: /say, /kick <player>, /pvp on|off, /tp <p1> <p2>, /gamemode <c|s> <p>, /clear');
     }
@@ -4594,42 +4664,12 @@ async function join9A(){
   
   nr = new UniversalNetwork('9a', false);
   
-  const peerBlkRate = new Map();
   nr.on('blk', (d, sender) => {
     if(!d || d.y == null || d.x == null || d.z == null) return;
     if(d.y < 0 || d.y >= H || d.x < MIN_COORD || d.x > MAX_COORD || d.z < MIN_COORD || d.z > MAX_COORD) return;
     if(d.id < 0 || d.id > 150) return;
-    
-    // Anti-Nuke Rate Limiting per peer
-    const pId = sender || d.sender || 'unknown';
-    const now = performance.now();
-    let r = peerBlkRate.get(pId);
-    if(!r || now - r.reset > 1000){ r = { count: 0, reset: now }; peerBlkRate.set(pId, r); }
-    r.count++;
-    if(r.count > 16){
-      if(r.count === 17) Host9A.log('warn', 'Anti-Nuke: Block rate limit exceeded by peer.');
-      if(r.count > 35 && nr && nr.peers.has(pId)){
-        const peerObj = nr.peers.get(pId);
-        const pName = (peerObj && peerObj.presence && peerObj.presence.n) ? peerObj.presence.n : 'Nuker';
-        nr.emit('kick', { target: pId, name: pName, reason: 'Anti-Nuke: Excessive block manipulation.' }).catch(()=>{});
-        nr.peers.delete(pId);
-        nr.cleanStalePeers();
-        Host9A.log('warn', 'Auto-kicked ' + pName + ' for nuking.');
-      }
-      return; // Drop packet
-    }
-
-    // Distance reach validation (max 9.5 blocks reach)
-    if(nr && nr.peers.has(pId)){
-      const pObj = nr.peers.get(pId);
-      if(pObj && pObj.presence && pObj.presence.x != null){
-        const distSq = (d.x - pObj.presence.x)**2 + (d.y - pObj.presence.y)**2 + (d.z - pObj.presence.z)**2;
-        if(distSq > 90) return; // Drop reach hacked block edit
-      }
-    }
-
     setB(d.x, d.y, d.z, d.id, true, d.facing);
-    scheduleSaveWorldData('server_9a');
+    queueSaveWorldData('server_9a');
   });
   
   // When another player needs world edits, only mesh host responds if Host is not active
@@ -4645,12 +4685,36 @@ async function join9A(){
         chests,
         furn
       }).catch(()=>{});
+      nr.emit('time_sync', { tod, dayF }).catch(()=>{});
     }
   });
   
   nr.on('chat', onChat); nr.on('sign_sync', d => { if(d && d.key) signs[d.key] = d.lines; });
 
-  nr.on('time_sync', d => { if(d && typeof d.tod === 'number'){ tod = d.tod; dayF = 1; toast('The sun rises!'); } });
+  nr.on('time_sync', d => {
+    if(d && typeof d.tod === 'number'){
+      tod = d.tod;
+      const q = tod % 480;
+      dayF = (typeof d.dayF === 'number') ? d.dayF : (q < 300 ? 1 : q < 340 ? 1 - (q - 300) / 40 : q < 440 ? 0 : (q - 440) / 40);
+      if(d.msg) toast(d.msg);
+    }
+  });
+
+  nr.on('mob_damage', d => {
+    if(!d || !d.id) return;
+    const m = mobs.find(q => q.id === d.id);
+    if(m){
+      m.hp = (typeof d.hp === 'number') ? Math.min(m.hp, d.hp) : (m.hp - (d.dmg || 1));
+      m.kb = 0.35;
+      if(d.kx) m.v.x = d.kx;
+      if(d.kz) m.v.z = d.kz;
+      m.v.y = 5;
+      if(m.hp <= 0){
+        deadMobIds.add(m.id);
+      }
+    }
+  });
+
   nr.on('drop_spawn', d => {
     if(!drops.some(q => q.uid === d.uid)){
       const drop = spawnDrop(d.id, d.n, d.x, d.y, d.z, [d.vx, d.vy, d.vz], 0, d.uid);
@@ -4670,28 +4734,37 @@ async function join9A(){
   });
   nr.on('mobs_sync', list => {
     if(!Array.isArray(list) || hostIsRunning) return;
+    lastMobsSyncRecv = performance.now();
     const incomingIds = new Set();
     const mobsById = new Map();
     for(let i = 0; i < mobs.length; i++) mobsById.set(mobs[i].id, mobs[i]);
     for(let i = 0; i < list.length; i++){
       const sm = list[i];
+      if(!sm || !sm.id || deadMobIds.has(sm.id)) continue;
       incomingIds.add(sm.id);
       let m = mobsById.get(sm.id);
       if(!m){
         const d = MD[sm.type];
         if(!d) continue;
-        m = { type: sm.type, p: new V3(sm.x, sm.y, sm.z), v: new V3(), hp: sm.hp, dir: 0, tm: 0, w: d[0]/2, h: d[1], atk: 0, ry: sm.ry, id: sm.id };
+        m = { type: sm.type, p: new V3(sm.x, sm.y, sm.z), v: new V3(), hp: sm.hp, dir: 0, tm: 0, w: d[0]/2, h: d[1], atk: 0, ry: sm.ry, id: sm.id, _spawnTime: performance.now() };
         mobs.push(m);
         mobsById.set(sm.id, m);
       } else {
         m.p.set(sm.x, sm.y, sm.z);
-        m.hp = sm.hp;
+        if(sm.hp <= 0){
+          m.hp = 0;
+          deadMobIds.add(sm.id);
+        } else if(sm.hp < m.hp){
+          m.hp = sm.hp;
+        }
         m.ry = sm.ry;
         m.kb = sm.kb;
       }
     }
     for(let i = mobs.length - 1; i >= 0; i--){
-      if(!incomingIds.has(mobs[i].id)) mobs.splice(i, 1);
+      if(mobs[i].id && !incomingIds.has(mobs[i].id) && (performance.now() - (mobs[i]._spawnTime || 0) > 3000)){
+        mobs.splice(i, 1);
+      }
     }
   });
   nr.onPeers(onPeers);
@@ -4721,10 +4794,18 @@ async function joinMP(){
   loadWorldData('room_' + code + '_' + myName);
   
   nr = new UniversalNetwork(code, false);
-  nr.on('blk', d => setB(d.x, d.y, d.z, d.id, true, d.facing));
+  nr.on('blk', d => {
+    if(!d || d.y == null || d.x == null || d.z == null) return;
+    if(d.y < 0 || d.y >= H || d.x < MIN_COORD || d.x > MAX_COORD || d.z < MIN_COORD || d.z > MAX_COORD) return;
+    setB(d.x, d.y, d.z, d.id, true, d.facing);
+    queueSaveWorldData(activeWorldId);
+  });
     nr.on('need', (d) => {
     const isMeshHost = hostIsRunning || (!nr) || (peersList.length === 0) || (peersList.every(p => myPeerId <= p.peer));
-    if(isMeshHost && edits.size) nr.emit('edits', { target: d && d.target ? d.target : null, list: [...edits] }).catch(()=>{});
+    if(isMeshHost && edits.size){
+      nr.emit('edits', { target: d && d.target ? d.target : null, list: [...edits] }).catch(()=>{});
+      nr.emit('time_sync', { tod, dayF }).catch(()=>{});
+    }
   });
   nr.on('edits', d => {
     if(d && d.target && d.target !== myPeerId) return; // Skip if targeted to another newcomer!
@@ -4746,6 +4827,31 @@ async function joinMP(){
     dirty = true;
   });
   nr.on('chat', onChat); nr.on('sign_sync', d => { if(d && d.key) signs[d.key] = d.lines; });
+
+  nr.on('time_sync', d => {
+    if(d && typeof d.tod === 'number'){
+      tod = d.tod;
+      const q = tod % 480;
+      dayF = (typeof d.dayF === 'number') ? d.dayF : (q < 300 ? 1 : q < 340 ? 1 - (q - 300) / 40 : q < 440 ? 0 : (q - 440) / 40);
+      if(d.msg) toast(d.msg);
+    }
+  });
+
+  nr.on('mob_damage', d => {
+    if(!d || !d.id) return;
+    const m = mobs.find(q => q.id === d.id);
+    if(m){
+      m.hp = (typeof d.hp === 'number') ? Math.min(m.hp, d.hp) : (m.hp - (d.dmg || 1));
+      m.kb = 0.35;
+      if(d.kx) m.v.x = d.kx;
+      if(d.kz) m.v.z = d.kz;
+      m.v.y = 5;
+      if(m.hp <= 0){
+        deadMobIds.add(m.id);
+      }
+    }
+  });
+
   nr.on('drop_spawn', d => {
     if(!drops.some(q => q.uid === d.uid)){
       const drop = spawnDrop(d.id, d.n, d.x, d.y, d.z, [d.vx, d.vy, d.vz], 0, d.uid);
@@ -4765,23 +4871,36 @@ async function joinMP(){
   });
   nr.on('mobs_sync', list => {
     if(!Array.isArray(list) || hostIsRunning) return;
+    lastMobsSyncRecv = performance.now();
+    const incomingIds = new Set();
+    const mobsById = new Map();
+    for(let i = 0; i < mobs.length; i++) mobsById.set(mobs[i].id, mobs[i]);
     list.forEach(sm => {
-      let m = mobs.find(q => q.id === sm.id);
+      if(!sm || !sm.id || deadMobIds.has(sm.id)) return;
+      incomingIds.add(sm.id);
+      let m = mobsById.get(sm.id);
       if(!m){
         const d = MD[sm.type];
         if(!d) return;
-        m = { type: sm.type, p: new V3(sm.x, sm.y, sm.z), v: new V3(), hp: sm.hp, dir: 0, tm: 0, w: d[0]/2, h: d[1], atk: 0, ry: sm.ry, id: sm.id };
+        m = { type: sm.type, p: new V3(sm.x, sm.y, sm.z), v: new V3(), hp: sm.hp, dir: 0, tm: 0, w: d[0]/2, h: d[1], atk: 0, ry: sm.ry, id: sm.id, _spawnTime: performance.now() };
         mobs.push(m);
+        mobsById.set(sm.id, m);
       } else {
         m.p.set(sm.x, sm.y, sm.z);
-        m.hp = sm.hp;
+        if(sm.hp <= 0){
+          m.hp = 0;
+          deadMobIds.add(sm.id);
+        } else if(sm.hp < m.hp){
+          m.hp = sm.hp;
+        }
         m.ry = sm.ry;
         m.kb = sm.kb;
       }
     });
-    // Remove dead/unlisted
     for(let i = mobs.length - 1; i >= 0; i--){
-      if(!list.some(q => q.id === mobs[i].id)) mobs.splice(i, 1);
+      if(mobs[i].id && !incomingIds.has(mobs[i].id) && (performance.now() - (mobs[i]._spawnTime || 0) > 3000)){
+        mobs.splice(i, 1);
+      }
     }
   });
   nr.onPeers(onPeers);
