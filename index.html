@@ -1728,16 +1728,13 @@ function stampVillageStructures(ch){
       put(vx - 13, vy + 1, vz + 9, 13); addChestLoot(vx - 13, vy + 1, vz + 9, [[22, 5], [25, 1], [NID.Bread, 5], [NID.Apple, 3], [NID['Gold Ingot'], 3], [NID.Obsidian, 4], [NID.Diamond, 1]]);
       fill(vx - 14, vy + 4, vz + 5, vx - 9, vy + 4, vz + 10, 4); // Stone roof
 
-      // 6. Crop Farm (East)
+      // 6. Crop Farm (East) - Clean farmland garden with irrigation canal, no transparent crop blocks
       fill(vx + 12, vy, vz - 5, vx + 18, vy, vz - 5, 5);
       fill(vx + 12, vy, vz + 3, vx + 18, vy, vz + 3, 5);
       fill(vx + 12, vy, vz - 4, vx + 12, vy, vz + 2, 5);
       fill(vx + 18, vy, vz - 4, vx + 18, vy, vz + 2, 5);
-      fill(vx + 13, vy, vz - 4, vx + 17, vy, vz + 2, 2); // Farmland soil
+      fill(vx + 13, vy, vz - 4, vx + 17, vy, vz + 2, (typeof NID !== "undefined" && NID.Farmland) ? NID.Farmland : 2); // Farmland soil
       fill(vx + 15, vy, vz - 4, vx + 15, vy, vz + 2, NID.Water); // Center water canal
-      fill(vx + 13, vy + 1, vz - 4, vx + 14, vy + 1, vz + 2, NID.Wheat); // Wheat
-      fill(vx + 16, vy + 1, vz - 4, vx + 16, vy + 1, vz + 2, NID.Carrot); // Carrots
-      fill(vx + 17, vy + 1, vz - 4, vx + 17, vy + 1, vz + 2, NID.Potato); // Potatoes
 
       // 7. Lantern Posts
       put(vx + 3, vy + 1, vz + 3, 4); put(vx + 3, vy + 2, vz + 3, 4); put(vx + 3, vy + 3, vz + 3, NID.Lantern);
@@ -2462,12 +2459,14 @@ function rebuild(fullSync){
     for(let cx = pcx - CH_RADIUS; cx <= pcx + CH_RADIUS; cx++){
       const ch = getChunk(cx, cz);
       activeChunks.push(ch);
-      const dist = Math.max(Math.abs(cx - pcx), Math.abs(cz - pcz));
-      if((ch.dirty || !ch.mesh) && (dist <= 1 || (fullSync && meshesBuilt < 9) || (!playing && meshesBuilt < 9) || meshesBuilt < 1)){
-        buildChunkMesh(ch);
-        meshesBuilt++;
-      } else if(ch.dirty || !ch.mesh){
-        dirty = true; // schedule remaining chunk on next frame to prevent stutter
+      const maxPerFrame = (fullSync || !playing) ? 9 : 1;
+      if(ch.dirty || !ch.mesh){
+        if(meshesBuilt < maxPerFrame){
+          buildChunkMesh(ch);
+          meshesBuilt++;
+        } else {
+          dirty = true; // schedule remaining chunk on next frame to prevent stutter
+        }
       }
       if(ch.mesh) totalLen += ch.mesh.length;
     }
@@ -2920,20 +2919,39 @@ const drops=[];function spawnDrop(id,n,x,y,z,v,age,uid){
   }
   return d;
 }
-let lastDespawnWarnTime = 0, lastDespawnAlertTime = 0;
+let serverDespawnTimer = 0;
+let serverDespawnWarned = false;
 function updDrops(dt){
   const now = performance.now();
-  let despawnedCount = 0;
+
+  // Unified synchronized 150s despawn cycle for all players
+  const isCoordinator = hostIsRunning || (!nr) || (!peersList || peersList.length === 0) || (peersList.every(p => myPeerId <= p.peer));
+  if(isCoordinator){
+    serverDespawnTimer += dt;
+    if(serverDespawnTimer >= 130 && !serverDespawnWarned){
+      serverDespawnWarned = true;
+      if(nr){
+        nr.emit('chat', { from: '[SERVER]', t: 'Warning: All dropped items will despawn in 20 seconds!', col: '#f39c12' }).catch(()=>{});
+        nr.emit('despawn_warn', {}).catch(()=>{});
+      }
+      chatMsg('[SERVER] Warning: All dropped items will despawn in 20 seconds!', '#f39c12');
+    }
+    if(serverDespawnTimer >= 150){
+      serverDespawnTimer = 0;
+      serverDespawnWarned = false;
+      if(nr){
+        nr.emit('clear_drops', {}).catch(()=>{});
+        nr.emit('chat', { from: '[SERVER]', t: 'All dropped items have despawned.', col: '#e74c3c' }).catch(()=>{});
+      }
+      drops.length = 0;
+      chatMsg('[SERVER] All dropped items have despawned.', '#e74c3c');
+    }
+  }
+
+  // Physics, lifetime & collection loop
   for(let i=drops.length-1;i>=0;i--){
     const d=drops[i];
     d.age+=dt;
-    if(!d.warned && d.age >= 130 && d.age < 150){
-      d.warned = true;
-      if(now - lastDespawnWarnTime > 25000){
-        lastDespawnWarnTime = now;
-        chatMsg('Warning: Dropped items will despawn in 20 seconds!', '#f39c12');
-      }
-    }
     d.v.y-=22*dt;
     move(d,dt,.13,.25);
     if(d.ground){d.v.x*=.8;d.v.z*=.8}
@@ -2943,14 +2961,9 @@ function updDrops(dt){
       SFX.pop();
       if(nr)nr.emit("drop_pickup", {uid: d.uid}).catch(()=>{});
       drops.splice(i,1);
-    } else if(d.age>=150 || d.p.y<-5){
-      if(d.age >= 150) despawnedCount++;
+    } else if(d.p.y<-5){
       drops.splice(i,1);
     }
-  }
-  if(despawnedCount > 0 && now - lastDespawnAlertTime > 15000){
-    lastDespawnAlertTime = now;
-    chatMsg('Dropped items have despawned.', '#e74c3c');
   }
 }
 function setB(x,y,z,id,net){
@@ -4006,6 +4019,10 @@ class UniversalNetwork {
             if(data && data.chests) Object.assign(chests, data.chests);
             if(data && data.furn) Object.assign(furn, data.furn);
           } else if(channel === 'reset_world'){
+            if(typeof _saveDebounceTimer !== 'undefined' && _saveDebounceTimer){
+              clearTimeout(_saveDebounceTimer); _saveDebounceTimer = null;
+            }
+            window._serverWiping = true;
             try {
               localStorage.removeItem('boba_save_server_9a');
               localStorage.removeItem('boba_pos_server_9a');
@@ -4014,14 +4031,19 @@ class UniversalNetwork {
             } catch(e){}
             edits.clear(); chunks.clear(); spawnedVillages.clear(); clearAllLights();
             for(const k in chests) delete chests[k]; for(const k in furn) delete furn[k];
+            for(let i=0; i<36; i++) inv[i] = null;
+            for(let i=0; i<4; i++) arm[i] = null;
+            hp = 20; food = 20; savedPos = null;
+            if(typeof hud === 'function') hud();
             drops.length = 0; mobs.length = 0;
             if(data && data.seed !== undefined){ MAPN = data.seed; MAPV = data.seed; }
             savedPos = null;
             if(playing){
               pl.p.copy(spawnPt()); fy = pl.p.y; pl.v.set(0, 0, 0); gen(); rebuild(true);
             }
-            toast('Server world reset to fresh wilderness!');
+            toast('Server world reset: inventory wiped & wilderness restored!');
             chatMsg('[SERVER] Server world has been reset to fresh wilderness.', '#2ecc71');
+            setTimeout(() => { window._serverWiping = false; }, 3000);
             this.dispatch(channel, data);
           } else {
             this.dispatch(channel, data);
@@ -4342,6 +4364,12 @@ const Host9A = {
       localStorage.removeItem('boba_pos_server_9a');
       localStorage.removeItem('boba_chests_server_9a');
       localStorage.removeItem('boba_furn_server_9a');
+      if(typeof activeWorldId !== 'undefined' && activeWorldId){
+        localStorage.removeItem('boba_save_' + activeWorldId);
+        localStorage.removeItem('boba_pos_' + activeWorldId);
+        localStorage.removeItem('boba_chests_' + activeWorldId);
+        localStorage.removeItem('boba_furn_' + activeWorldId);
+      }
     } catch(e){}
 
     // Clear local inventory, armor, coordinates and UI hotbar
@@ -4357,12 +4385,12 @@ const Host9A = {
     MAPV = newSeed;
 
     if(activeNet){
-      // Global kick packet targeting everyone
-      activeNet.emit('kick', { target: 'all', reason: 'World was reset by admin. Please rejoin!' }).catch(()=>{});
+      // Global kick packet targeting everyone except the sender
+      activeNet.emit('kick', { target: 'all', reason: 'World was reset by admin. Please rejoin!', fromAdmin: true, senderPeer: myPeerId }).catch(()=>{});
       if(activeNet.peers){
         for(const [k, v] of activeNet.peers){
           const victimName = (v.presence && v.presence.n) ? v.presence.n : pn(v);
-          activeNet.emit('kick', { target: v.peer, name: victimName, reason: 'World was reset by admin. Please rejoin!' }).catch(()=>{});
+          activeNet.emit('kick', { target: v.peer, name: victimName, reason: 'World was reset by admin. Please rejoin!', fromAdmin: true, senderPeer: myPeerId }).catch(()=>{});
         }
         activeNet.peers.clear();
         activeNet.cleanStalePeers();
@@ -4791,6 +4819,13 @@ async function join9A(){
     const idx = drops.findIndex(q => q.uid === d.uid);
     if(idx >= 0) drops.splice(idx, 1);
   });
+  nr.on('clear_drops', () => {
+    drops.length = 0;
+    chatMsg('[SERVER] All dropped items have despawned.', '#e74c3c');
+  });
+  nr.on('despawn_warn', () => {
+    chatMsg('[SERVER] Warning: All dropped items will despawn in 20 seconds!', '#f39c12');
+  });
   nr.on('mobs_sync', list => {
     if(!Array.isArray(list) || hostIsRunning) return;
     const incomingIds = new Set();
@@ -4876,6 +4911,13 @@ async function joinMP(){
   nr.on('drop_pickup', d => {
     const idx = drops.findIndex(q => q.uid === d.uid);
     if(idx >= 0) drops.splice(idx, 1);
+  });
+  nr.on('clear_drops', () => {
+    drops.length = 0;
+    chatMsg('[SERVER] All dropped items have despawned.', '#e74c3c');
+  });
+  nr.on('despawn_warn', () => {
+    chatMsg('[SERVER] Warning: All dropped items will despawn in 20 seconds!', '#f39c12');
   });
   nr.on('mobs_sync', list => {
     if(!Array.isArray(list) || hostIsRunning) return;
