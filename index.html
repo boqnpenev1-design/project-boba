@@ -2459,14 +2459,9 @@ function rebuild(fullSync){
     for(let cx = pcx - CH_RADIUS; cx <= pcx + CH_RADIUS; cx++){
       const ch = getChunk(cx, cz);
       activeChunks.push(ch);
-      const maxPerFrame = (fullSync || !playing) ? 9 : 1;
       if(ch.dirty || !ch.mesh){
-        if(meshesBuilt < maxPerFrame){
-          buildChunkMesh(ch);
-          meshesBuilt++;
-        } else {
-          dirty = true; // schedule remaining chunk on next frame to prevent stutter
-        }
+        buildChunkMesh(ch);
+        meshesBuilt++;
       }
       if(ch.mesh) totalLen += ch.mesh.length;
     }
@@ -4083,56 +4078,12 @@ class UniversalNetwork {
       this.peers.set(data.peer, p);
       this.triggerPeerUpdate();
     } else {
-      // Server-Side Anti-Cheat Validation for Boba Client (Speed, Flight, Noclip)
-      if(p.curX !== undefined && typeof get === 'function'){
-        const dx = data.x - p.curX, dz = data.z - p.curZ, dy = data.y - p.curY;
-        const distH = Math.hypot(dx, dz);
-        const dt = Math.max(0.04, (now - p.lastSeen) / 1000);
-        const speedH = distH / dt;
-
-        // 1. Anti-Speed (Max sprint is 5.8 bps; allow up to 16.0 for knockback)
-        if(speedH > 16.5 && dt < 1.0){
-          p.speedViolations = (p.speedViolations || 0) + 1;
-          if(p.speedViolations > 3){
-            this.emit('kick', { target: data.peer, name: data.n, reason: 'Anti-Cheat: Speed hack detected.' }).catch(()=>{});
-            this.peers.delete(data.peer);
-            this.triggerPeerUpdate();
-            return;
-          }
-        } else {
-          p.speedViolations = 0;
-        }
-
-        // 2. Anti-Flight (Survival mode continuous ascent in midair)
-        if(!data.dead && dy > 1.3 && data.y > 4 && dt < 0.6){
-          const bx = Math.floor(data.x), by = Math.floor(data.y), bz = Math.floor(data.z);
-          const feetBlock = get(bx, by - 1, bz);
-          const curBlock = get(bx, by, bz);
-          const isClimbing = curBlock === NID.Water || curBlock === NID.Ladder || feetBlock === NID.Water || feetBlock === NID.Ladder;
-          if(!isClimbing && feetBlock === 0){
-            p.flyViolations = (p.flyViolations || 0) + 1;
-            if(p.flyViolations > 4){
-              this.emit('kick', { target: data.peer, name: data.n, reason: 'Anti-Cheat: Flight detected.' }).catch(()=>{});
-              this.peers.delete(data.peer);
-              this.triggerPeerUpdate();
-              return;
-            }
-          }
-        } else {
-          p.flyViolations = 0;
-        }
-
-        // 3. Anti-Noclip (Clipping inside bedrock or stone)
-        if(data.y >= 0 && data.y < H){
-          const headBlock = get(Math.floor(data.x), Math.floor(data.y + 0.8), Math.floor(data.z));
-          if(headBlock === 14){ // Bedrock
-            this.emit('kick', { target: data.peer, name: data.n, reason: 'Anti-Cheat: Noclip through bedrock.' }).catch(()=>{});
-            this.peers.delete(data.peer);
-            this.triggerPeerUpdate();
-            return;
-          }
-        }
-      }
+      // Sync peer coordinates cleanly on every packet without false kicks
+      p.curX = data.x;
+      p.curY = data.y;
+      p.curZ = data.z;
+      p.curYaw = data.r || 0;
+      p.curPitch = data.p || 0;
       p.presence = data;
       p.lastSeen = now;
     }
