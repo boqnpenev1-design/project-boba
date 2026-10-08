@@ -5058,14 +5058,7 @@ function deleteSelectedWorld(){
 }
 
 let savedPos = null;
-let _saveDebounceTimer = null;
-function scheduleSaveWorldData(wid){
-  if(_saveDebounceTimer) return;
-  _saveDebounceTimer = setTimeout(() => {
-    _saveDebounceTimer = null;
-    saveWorldData(wid);
-  }, 2500);
-}
+const scheduleSaveWorldData = queueSaveWorldData;
 
 function saveWorldData(wid){
   if(!wid || !playing) return;
