@@ -1202,38 +1202,20 @@ try {
   else localStorage.setItem('boba_device_id', myDeviceId);
 } catch(e){}
 
+try {
+  localStorage.removeItem('boba_ban_names');
+  localStorage.removeItem('boba_ban_ips');
+  localStorage.removeItem('boba_ban_devices');
+  localStorage.removeItem('boba_bans');
+} catch(e){}
 const banSystem = {
-  names: new Set(JSON.parse(localStorage.getItem('boba_ban_names') || '[]').map(s => s.toLowerCase())),
-  ips: new Set(JSON.parse(localStorage.getItem('boba_ban_ips') || '[]')),
-  devices: new Set(JSON.parse(localStorage.getItem('boba_ban_devices') || '[]')),
-  save(){
-    try {
-      localStorage.setItem('boba_ban_names', JSON.stringify([...this.names]));
-      localStorage.setItem('boba_ban_ips', JSON.stringify([...this.ips]));
-      localStorage.setItem('boba_ban_devices', JSON.stringify([...this.devices]));
-    } catch(e){}
-  },
-  isBanned(name, ip, dev){
-    if(name && this.names.has(name.toLowerCase())) return 'Name banned: ' + name;
-    if(ip && ip !== 'Unknown' && this.ips.has(ip)) return 'IP banned: ' + ip;
-    if(dev && this.devices.has(dev)) return 'Device banned';
-    return false;
-  },
-  ban(name, ip, dev){
-    if(name) this.names.add(name.toLowerCase());
-    if(ip && ip !== 'Unknown') this.ips.add(ip);
-    if(dev) this.devices.add(dev);
-    this.save();
-  },
-  unban(target){
-    const tLow = target.toLowerCase();
-    let removed = false;
-    if(this.names.has(tLow)){ this.names.delete(tLow); removed = true; }
-    if(this.ips.has(target)){ this.ips.delete(target); removed = true; }
-    if(this.devices.has(target)){ this.devices.delete(target); removed = true; }
-    this.save();
-    return removed;
-  }
+  names: new Set(),
+  ips: new Set(),
+  devices: new Set(),
+  save(){},
+  isBanned(){ return null; },
+  ban(){},
+  unban(){ return true; }
 };
 
 function flashHurt(){
@@ -1279,65 +1261,8 @@ function sendChat(t){
     return;
   }
 
-  if(cmd === 'unban' || cmd === 'pardon'){
-    if(!isAdmin){
-      chatMsg('Permission denied: Admin privileges required.', '#ff4444');
-      return;
-    }
-    const target = parts.slice(1).join(' ').trim();
-    if(!target){
-      chatMsg('Usage: /unban <playername | ip | device>', '#ffcc00');
-      return;
-    }
-    if(banSystem.unban(target)){
-      chatMsg('Unbanned: ' + target, '#2ecc71');
-      toast('Unbanned: ' + target);
-      const activeNet = (Host9A.net && Host9A.net.connected) ? Host9A.net : (nr && nr.connected ? nr : null);
-      if(activeNet){
-        activeNet.emit('chat', { from: '[SERVER]', t: target + ' has been unbanned.', col: '#2ecc71' }).catch(()=>{});
-      }
-      Host9A.log('info', 'Unbanned: ' + target);
-    } else {
-      chatMsg(target + ' was not in the ban list.', '#ffaa00');
-    }
-    return;
-  }
-
-  if(cmd === 'ban'){
-    if(!isAdmin){
-      chatMsg('Permission denied: Admin privileges required.', '#ff4444');
-      return;
-    }
-    const bName = parts[1] ? parts[1].trim() : '';
-    if(!bName){
-      chatMsg('Usage: /ban <playername>', '#ffcc00');
-      return;
-    }
-    const activeNet = (Host9A.net && Host9A.net.connected) ? Host9A.net : (nr && nr.connected ? nr : null);
-    let foundPeer = null;
-    if(activeNet && activeNet.peers){
-      for(const [k, v] of activeNet.peers){
-        const name = (v.presence && v.presence.n) ? v.presence.n : pn(v);
-        if(name.toLowerCase() === bName.toLowerCase() || name.toLowerCase().indexOf(bName.toLowerCase()) >= 0){
-          foundPeer = v;
-          break;
-        }
-      }
-    }
-    const ip = (foundPeer && foundPeer.presence && foundPeer.presence.ip) ? foundPeer.presence.ip : 'Unknown';
-    const dev = (foundPeer && foundPeer.presence && foundPeer.presence.dev) ? foundPeer.presence.dev : null;
-    banSystem.ban(bName, ip, dev);
-    chatMsg('Banned ' + bName + ' from the server.', '#ff4d4d');
-    toast('Banned ' + bName);
-    if(activeNet){
-      activeNet.emit('chat', { from: '[SERVER]', t: bName + ' was banned from the server.', col: '#ff4d4d' }).catch(()=>{});
-      if(foundPeer){
-        activeNet.emit('kick', { target: foundPeer.peer, name: bName, reason: 'Banned from server.' }).catch(()=>{});
-        activeNet.peers.delete(foundPeer.peer);
-        activeNet.cleanStalePeers();
-      }
-    }
-    Host9A.log('warn', 'Banned player: ' + bName);
+  if(cmd === 'ban' || cmd === 'unban' || cmd === 'pardon'){
+    chatMsg('Ban commands have been disabled.', '#ffaa00');
     return;
   }
 
@@ -1377,17 +1302,7 @@ function sendChat(t){
     return;
   }
 
-  if(cmd === 'banlist' || cmd === 'bans'){
-    if(!isAdmin){
-      chatMsg('Permission denied: Admin privileges required.', '#ff4444');
-      return;
-    }
-    chatMsg('--- ACTIVE BANS ---', '#ffcc00');
-    chatMsg('Names: ' + ([...banSystem.names].join(', ') || 'None'), '#ffffff');
-    chatMsg('IPs: ' + ([...banSystem.ips].join(', ') || 'None'), '#ffffff');
-    chatMsg('Devices: ' + ([...banSystem.devices].join(', ') || 'None'), '#ffffff');
-    return;
-  }
+
 
   if(cmd === 'day' || (cmd === 'time' && (parts[1] === 'day' || (parts[1] === 'set' && parts[2] === 'day')))){
     tod = 60; dayF = 1; toast('Time set to Day'); chatMsg('Time set to Day', '#7fff3a');
@@ -1448,7 +1363,7 @@ function sendChat(t){
     } else if(c === 'map'){
       chatMsg('Map ' + (MAPN + 1) + ' of 10');
     } else if(c === 'help'){
-      chatMsg('/gamemode <c/s> * /creative * /msg <p> <t> * /me <t> * /players * /map' + (isAdmin ? ' * [ADMIN]: /reset * /unban <target> * /ban <p> * /kick <p> * /banlist' : ''), '#ff0');
+      chatMsg('/gamemode <c/s> * /creative * /msg <p> <t> * /me <t> * /players * /map' + (isAdmin ? ' * [ADMIN]: /reset * /kick <p>' : ''), '#ff0');
     } else {
       chatMsg('Unknown command. Try /help', '#f88');
     }
@@ -1462,7 +1377,7 @@ function onChat(d){const me=peersList.find(q=>q.isMe);if(d.to&&(!me||d.to!==me.p
 const peerActionTimes = new Map();
 function onPeers(c){
   peersList=c.peers;
-  const duplicate = c.peers.filter(q => !q.isMe && pn(q).toLowerCase() === myName.toLowerCase());
+  const duplicate = c.peers.filter(q => !q.isMe && pn(q).toLowerCase() === myName.toLowerCase() && q.peer < myPeerId);
   if(duplicate.length > 0){
     myName = enforceUniqueName(myName);
     toast('Name adjusted to ' + myName);
@@ -3908,7 +3823,10 @@ class UniversalNetwork {
           this.broadcastStatus(true);
         } else {
           this.emit('req_status', {});
-          this.emit('need', {});
+          this.emit('need', { target: this.peerId });
+        }
+        if(!this._staleInterval){
+          this._staleInterval = setInterval(() => { this.cleanStalePeers(); }, 2500);
         }
       });
       
@@ -3993,22 +3911,27 @@ class UniversalNetwork {
             }
             this.dispatch(channel, data);
           } else if(channel === 'sync_world'){
+            // If targeted to a specific incoming peer, all existing peers ignore it completely!
+            if(data && data.target && data.target !== this.peerId) return;
             if(data && data.edits && Array.isArray(data.edits)){
               const maxSync = Math.min(data.edits.length, 5000);
+              const dirtyChunks = new Set();
               for(let ei = 0; ei < maxSync; ei++){
                 const [k, v] = data.edits[ei];
                 edits.set(k, v);
-                const [x, y, z] = k.split(',').map(Number);
+                const c1 = k.indexOf(','), c2 = k.indexOf(',', c1 + 1);
+                const x = +k.slice(0, c1), y = +k.slice(c1 + 1, c2), z = +k.slice(c2 + 1);
                 const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
                 const ch = chunks.get(cx + ',' + cz);
                 if(ch){
                   const lx = (x % 16 + 16) % 16, lz = (z % 16 + 16) % 16;
                   ch.data[lx + lz * 16 + y * 256] = v;
-                  ch.dirty = true;
+                  dirtyChunks.add(ch);
                 }
                 if(LIGHT_EMIT.has(v)) registerLight(x, y, z, v === NID.Lava ? 12 : 9);
                 else if(v === 0) unregisterLight(x, y, z);
               }
+              for(const ch of dirtyChunks) ch.dirty = true;
               dirty = true;
             }
             if(data && data.chests) Object.assign(chests, data.chests);
@@ -4052,15 +3975,6 @@ class UniversalNetwork {
   
   handlePresence(data){
     if(!data.peer) return;
-    const banReason = banSystem.isBanned(data.n, data.ip, data.dev);
-    if(banReason){
-      if(this.peers.has(data.peer)){
-        this.peers.delete(data.peer);
-        this.triggerPeerUpdate();
-      }
-      this.emit('kick', { target: data.peer, name: data.n, reason: banReason }).catch(()=>{});
-      return;
-    }
     if(this.peers.size > 28 && !this.peers.has(data.peer)) return; // Anti-flood attack guard
     const now = performance.now();
     let p = this.peers.get(data.peer);
@@ -4087,7 +4001,6 @@ class UniversalNetwork {
       p.presence = data;
       p.lastSeen = now;
     }
-    this.cleanStalePeers();
   }
   
   cleanStalePeers(){
@@ -4208,9 +4121,10 @@ const Host9A = {
     serverPvP = hostConfig.pvp;
     
     // When incoming player requests world sync
-    this.net.on('need', () => {
-      Host9A.log('info', 'World synchronization requested by incoming player.');
+    this.net.on('need', (d) => {
+      Host9A.log('info', 'World synchronization sent to incoming player: ' + (d && d.target ? d.target : 'all'));
       this.net.emit('sync_world', {
+        target: d && d.target ? d.target : null,
         edits: Array.from(edits.entries()),
         chests,
         furn
@@ -4399,62 +4313,8 @@ const Host9A = {
     const parts = cmd.split(/\s+/);
     const op = parts[0].toLowerCase();
     
-    if(op === '/ban' || op === '/ban-name' || op === '/banname' || op === '/ban-ip' || op === '/banip' || op === '/ban-device' || op === '/bandevice'){
-      const targetArg = parts.slice(1).join(' ').trim();
-      if(!targetArg){
-        Host9A.log('warn', 'Usage: ' + op + ' <playername | ip>');
-        return;
-      }
-      let foundPeer = null;
-      if(this.net){
-        for(const [k, v] of this.net.peers){
-          const name = (v.presence && v.presence.n) ? v.presence.n : pn(v);
-          if(name.toLowerCase() === targetArg.toLowerCase() || (v.presence && v.presence.ip === targetArg)){
-            foundPeer = v;
-            break;
-          }
-        }
-      }
-      const bName = foundPeer ? ((foundPeer.presence && foundPeer.presence.n) ? foundPeer.presence.n : pn(foundPeer)) : targetArg;
-      const bIp = foundPeer && foundPeer.presence ? foundPeer.presence.ip : (targetArg.includes('.') ? targetArg : null);
-      const bDev = foundPeer && foundPeer.presence ? foundPeer.presence.dev : null;
-
-      if(op === '/ban-ip' || op === '/banip'){
-        if(bIp) banSystem.ips.add(bIp);
-        banSystem.save();
-        Host9A.log('warn', 'IP Banned: ' + (bIp || targetArg));
-      } else if(op === '/ban-device' || op === '/bandevice'){
-        if(bDev){ banSystem.devices.add(bDev); banSystem.save(); Host9A.log('warn', 'Device Banned: ' + bName + ' (' + bDev + ')'); }
-        else { Host9A.log('warn', 'Player device ID not found online for ' + targetArg); }
-      } else if(op === '/ban-name' || op === '/banname'){
-        banSystem.names.add(bName.toLowerCase());
-        banSystem.save();
-        Host9A.log('warn', 'Name Banned: ' + bName);
-      } else { // /ban: Full ban (name + IP + device)
-        banSystem.ban(bName, bIp, bDev);
-        Host9A.log('warn', 'Banned ' + bName + (bIp ? ' [IP: ' + bIp + ']' : '') + (bDev ? ' [Dev: ' + bDev + ']' : ''));
-      }
-      if(this.net){
-        this.net.emit('chat', { from: '[SERVER]', t: bName + ' was banned from the server.', col: '#ff4d4d' }).catch(()=>{});
-        if(foundPeer){
-          this.net.emit('kick', { target: foundPeer.peer, name: bName, reason: 'Banned from server.' }).catch(()=>{});
-          this.net.peers.delete(foundPeer.peer);
-          this.net.cleanStalePeers();
-        }
-      }
-    } else if(op === '/unban' || op === '/pardon'){
-      const targetArg = parts.slice(1).join(' ').trim();
-      if(!targetArg){ Host9A.log('warn', 'Usage: /unban <name | ip | device>'); return; }
-      if(banSystem.unban(targetArg)){
-        Host9A.log('info', 'Unbanned: ' + targetArg);
-      } else {
-        Host9A.log('warn', 'Target ' + targetArg + ' was not in ban list.');
-      }
-    } else if(op === '/banlist' || op === '/bans'){
-      Host9A.log('info', '--- ACTIVE BANS ---');
-      Host9A.log('info', 'Names: ' + ([...banSystem.names].join(', ') || 'None'));
-      Host9A.log('info', 'IPs: ' + ([...banSystem.ips].join(', ') || 'None'));
-      Host9A.log('info', 'Devices: ' + ([...banSystem.devices].join(', ') || 'None'));
+    if(op === '/ban' || op === '/unban' || op === '/banlist' || op === '/bans'){
+      Host9A.log('info', 'Ban system has been removed.');
     } else if(op === '/kick'){
       const targetName = parts.slice(1).join(' ').trim();
       if(!targetName){
@@ -4686,10 +4546,14 @@ async function join9A(){
     scheduleSaveWorldData('server_9a');
   });
   
-  // When another player needs world edits, share them
-  nr.on('need', () => {
+  // When another player needs world edits, only mesh host responds if Host is not active
+  nr.on('need', (d) => {
+    if(hostIsRunning) return; // Dedicated host handles sync, clients stay silent!
+    const isMeshHost = (!nr) || (peersList.length === 0) || (peersList.every(p => myPeerId <= p.peer));
+    if(!isMeshHost) return; // Only 1 designated coordinator responds, never everyone!
     if(edits.size){
       nr.emit('sync_world', {
+        target: d && d.target ? d.target : null,
         edits: Array.from(edits.entries()),
         chests,
         furn
@@ -4831,11 +4695,13 @@ async function joinMP(){
   
   nr = new UniversalNetwork(code, false);
   nr.on('blk', d => setB(d.x, d.y, d.z, d.id, true));
-    nr.on('need', () => {
+    nr.on('need', (d) => {
     const isMeshHost = hostIsRunning || (!nr) || (peersList.length === 0) || (peersList.every(p => myPeerId <= p.peer));
-    if(isMeshHost && edits.size) nr.emit('edits', [...edits]).catch(()=>{});
+    if(isMeshHost && edits.size) nr.emit('edits', { target: d && d.target ? d.target : null, list: [...edits] }).catch(()=>{});
   });
-  nr.on('edits', a => {
+  nr.on('edits', d => {
+    if(d && d.target && d.target !== myPeerId) return; // Skip if targeted to another newcomer!
+    const a = Array.isArray(d) ? d : (d && d.list ? d.list : null);
     if(!Array.isArray(a)) return;
     a.forEach(([k, v]) => {
       edits.set(k, v);
