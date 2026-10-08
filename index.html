@@ -243,12 +243,12 @@ for(let y=0;y<16;y++)for(let x=0;x<16;x++){const r=Math.random();g.fillStyle=r<.
 document.querySelectorAll('.scr:not(.pa)').forEach(e=>{e.style.backgroundImage='linear-gradient(#0004,#0004),url('+c.toDataURL()+')';e.style.backgroundSize='auto,128px 128px';e.style.imageRendering='pixelated'})})();
 </script>
 <script>
-// --- DevTools & Anti-Tamper Shield ---
+// --- DevTools, Anti-Cheat & Boba Client Lockdown ---
 (function(){
   // 1. Disable Right-Click Context Menu
   window.addEventListener('contextmenu', function(e){ e.preventDefault(); return false; }, true);
 
-  // 2. Block DevTools Shortcuts (F12, Ctrl+Shift+I/J/C, Ctrl+U)
+  // 2. Block DevTools & Cheat Shortcuts (F12, Ctrl+Shift+I/J/C, Ctrl+U, and Boba Client R key)
   window.addEventListener('keydown', function(e){
     if(
       e.key === 'F12' ||
@@ -260,9 +260,81 @@ document.querySelectorAll('.scr:not(.pa)').forEach(e=>{e.style.backgroundImage='
       e.stopPropagation();
       return false;
     }
+    // Intercept Boba Client KeyR toggle menu when not in chat
+    if((e.code === 'KeyR' || e.key === 'r' || e.key === 'R') && typeof chatOn !== 'undefined' && !chatOn && typeof ui !== 'undefined' && !ui){
+      e.stopImmediatePropagation();
+    }
   }, true);
 
-  // 3. Active Anti-Debugger Freeze Trap
+  // 3. DevTools Violation Disconnect Handler
+  function onDevToolsViolation(reason){
+    if(typeof playing !== 'undefined' && playing && typeof isMultiplayerWorld !== 'undefined' && isMultiplayerWorld){
+      if(typeof nr !== 'undefined' && nr){
+        try { nr.disconnect(); } catch(err){}
+        nr = null;
+      }
+      playing = false;
+      if(document.exitPointerLock) document.exitPointerLock();
+      if(typeof show === 'function') show('multi');
+      alert('Security violation: ' + (reason || 'Developer Tools / Extension tampering detected.') + '\nDisconnected from server.');
+    }
+  }
+
+  // 4. Boba Client DOM Menu & Overlay ESP Hunter
+  var _cheatObserver = new MutationObserver(function(mutations){
+    mutations.forEach(function(m){
+      m.addedNodes.forEach(function(node){
+        if(node.nodeType === 1){
+          var txt = (node.textContent || '').toLowerCase();
+          var cls = (node.className || '').toLowerCase();
+          var nid = (node.id || '').toLowerCase();
+          if(
+            txt.includes('flight') || txt.includes('noclip') || txt.includes('fullbright') ||
+            txt.includes('no fall') || txt.includes('boba client') || txt.includes('entity esp') ||
+            cls.includes('cheat') || nid.includes('cheat') || nid.includes('boba-menu') || nid.includes('boba_client')
+          ){
+            try { node.remove(); } catch(e){}
+            onDevToolsViolation('Boba Client cheat menu intercepted.');
+          }
+          // Anti-ESP overlay canvas hunter (foreign canvas placed on top of screen)
+          if(node.tagName === 'CANVAS' && node.id !== 'c'){
+            try { node.remove(); } catch(e){}
+            onDevToolsViolation('Foreign ESP overlay canvas blocked.');
+          }
+        }
+      });
+    });
+  });
+  if(document.documentElement) _cheatObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+  // 5. Console Command Trap Getters (Blocks calling nr, Host9A, sendChat from DevTools console)
+  ['nr', 'Host9A', 'sendChat', 'setB', 'banSystem', 'UniversalNetwork', 'flyMode'].forEach(function(k){
+    try {
+      Object.defineProperty(window, k, {
+        get: function(){
+          onDevToolsViolation('Console command execution blocked.');
+          return undefined;
+        },
+        set: function(){
+          onDevToolsViolation('Console command modification blocked.');
+        },
+        configurable: false
+      });
+    } catch(e){}
+  });
+
+  // 6. Docked & Undocked DevTools Detection
+  function checkDevTools(){
+    var wDiff = window.outerWidth - window.innerWidth > 160;
+    var hDiff = window.outerHeight - window.innerHeight > 160;
+    if(wDiff || hDiff){
+      onDevToolsViolation('Developer tools window detected.');
+    }
+  }
+  window.addEventListener('resize', checkDevTools);
+  setInterval(checkDevTools, 800);
+
+  // 7. Active Anti-Debugger Freeze Trap
   var _dbg = function(){
     try {
       (function(){ return Function('debugger')(); })();
@@ -270,15 +342,12 @@ document.querySelectorAll('.scr:not(.pa)').forEach(e=>{e.style.backgroundImage='
   };
   setInterval(_dbg, 250);
 
-  // 4. Console Protection & Security Banner
-  var _sc = function(){
+  // 8. Wipe console methods
+  ['log','warn','error','info','table','dir','debug','trace'].forEach(function(m){
     try {
-      console.clear();
-      console.log('%cSTOP!', 'color:#ff2222;font-size:32px;font-weight:bold;-webkit-text-stroke:1px black;');
-      console.log('%cDevTools inspection is prohibited on this server.', 'color:#f39c12;font-size:12px;font-weight:bold;');
+      console[m] = function(){};
     } catch(e){}
-  };
-  setInterval(_sc, 1500);
+  });
 })();
 let curDt = 0.016; const $=s=>document.querySelector(s),W=48,H=48,D=48;const hs=(x,z,s)=>{const n=Math.sin(x*127.1+z*311.7+s*74.7)*43758.5453;return n-Math.floor(n)};const hand=$('#hand'),hi=$('#hi'),tip=$('#tip');onbeforeunload=e=>{if(playing){e.preventDefault();return e.returnValue=''}};
 const T={1:['Grass','#5b9a3a',.6,2,0],2:['Dirt','#8a5e3b',.5,2,0],3:['Stone','#808080',1.5,4,1],4:['Cobblestone','#6e6e6e',2,4,1],5:['Oak Log','#6b4f2a',2,5,0],6:['Oak Planks','#b8905a',2,6,0],7:['Leaves','#2f7d2a',.2,0,0],8:['Sand','#dccf8f',.5,8,0],9:['Coal Ore','#4a4a4a',3,21,1],10:['Iron Ore','#a88b78',3,10,2],11:['Crafting Table','#8c5e2f',2.5,11,0],12:['Furnace','#5d5d5d',3.5,12,1],13:['Chest','#a0722d',2.5,13,0],14:['Bedrock','#222',9999,0,0],
@@ -1399,13 +1468,13 @@ function onPeers(c){
     toast('Name adjusted to ' + myName);
     if(nr) nr.presence({ x:+pl.p.x.toFixed(2), y:+pl.p.y.toFixed(2), z:+pl.p.z.toFixed(2), r:+pl.yaw.toFixed(2), p:+pl.pitch.toFixed(2), sw:false, n:myName, ip:myPublicIp, dev:myDeviceId }).catch(()=>{});
   }
-  const cur=new Set(c.peers.filter(q=>!q.isMe).map(pn));
-  cur.delete('?');
+  // Exclude self, unknown peers, and status checker pings from join/leave chat notifications
+  const cur=new Set(c.peers.filter(q=>!q.isMe && pn(q) !== '?' && pn(q).toLowerCase() !== myName.toLowerCase()).map(pn));
   const now = performance.now();
   cur.forEach(n=>{
     if(!known.has(n)){
       const last = peerActionTimes.get(n + ':join') || 0;
-      if(now - last > 12000){
+      if(now - last > 20000){
         chatMsg(n+' joined the game','#ff0');
         peerActionTimes.set(n + ':join', now);
       }
@@ -1414,7 +1483,7 @@ function onPeers(c){
   known.forEach(n=>{
     if(!cur.has(n)){
       const last = peerActionTimes.get(n + ':leave') || 0;
-      if(now - last > 12000){
+      if(now - last > 20000){
         chatMsg(n+' left the game','#ff0');
         peerActionTimes.set(n + ':leave', now);
       }
@@ -2313,8 +2382,9 @@ for(const id in T)for(let f=0;f<3;f++){const k=id*3+f;for(let y=0;y<16;y++)for(l
 for(const id in T){const c=document.createElement('canvas');c.width=c.height=16;c.getContext('2d').drawImage(a,(id*3%64)*16,Math.floor(id*3/64)*16,16,16,0,0,16,16);ICON[id]=c.toDataURL()}
 gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,a);for(const p of[gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,p,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE)}
 buildAtlas();const bg=id=>`background:url(${ICON[id]}) center/100% 100%;image-rendering:pixelated`;
+let meshScratchBuf = new Float32Array(262144);
 function buildChunkMesh(ch){
-  const a = [];
+  let meshPtr = 0;
   const splLocal = [];
   const wx = ch.wx, wz = ch.wz;
   const chunkLights = activeLightsList.length ? activeLightsList.filter(l => Math.abs(l[0] - (wx + 8)) <= 24 && Math.abs(l[2] - (wz + 8)) <= 24) : null;
@@ -2358,13 +2428,25 @@ function buildChunkMesh(ch){
               const maxD = (id === NID.Water) ? 7 : 4;
               vy = isSrc ? 1.0 : Math.max(0.18, 1.0 - (curD / (maxD + 0.5)) * 0.82);
             }
-            a.push(x + q[0], y + vy, z + q[2], u0 + uvc[0] * us, v0 + uvc[1] * us, b, b, b);
+            if(meshPtr + 8 > meshScratchBuf.length){
+              const expanded = new Float32Array(meshScratchBuf.length * 2);
+              expanded.set(meshScratchBuf);
+              meshScratchBuf = expanded;
+            }
+            meshScratchBuf[meshPtr++] = x + q[0];
+            meshScratchBuf[meshPtr++] = y + vy;
+            meshScratchBuf[meshPtr++] = z + q[2];
+            meshScratchBuf[meshPtr++] = u0 + uvc[0] * us;
+            meshScratchBuf[meshPtr++] = v0 + uvc[1] * us;
+            meshScratchBuf[meshPtr++] = b;
+            meshScratchBuf[meshPtr++] = b;
+            meshScratchBuf[meshPtr++] = b;
           }
         }
       }
     }
   }
-  ch.mesh = new Float32Array(a);
+  ch.mesh = new Float32Array(meshScratchBuf.subarray(0, meshPtr));
   ch.spl = splLocal;
   ch.dirty = false;
 }
@@ -2400,26 +2482,28 @@ function rebuild(fullSync){
     }
   }
 
-  if(!window.globalMeshBuf || window.globalMeshBuf.length < totalLen){
-    window.globalMeshBuf = new Float32Array(Math.max(totalLen, (window.globalMeshBuf ? window.globalMeshBuf.length * 2 : 262144)));
-  }
-  const combined = window.globalMeshBuf.subarray(0, totalLen);
-  spl.length = 0;
-  let offset = 0;
-  for(let i = 0; i < activeChunks.length; i++){
-    const ch = activeChunks[i];
-    if(ch && ch.mesh && ch.mesh.length){
-      combined.set(ch.mesh, offset);
-      offset += ch.mesh.length;
+  if(meshesBuilt > 0 || fullSync || !window.globalMeshBuf){
+    if(!window.globalMeshBuf || window.globalMeshBuf.length < totalLen){
+      window.globalMeshBuf = new Float32Array(Math.max(totalLen, (window.globalMeshBuf ? window.globalMeshBuf.length * 2 : 262144)));
     }
-    if(ch && ch.spl && ch.spl.length){
-      for(let j = 0; j < ch.spl.length; j++) spl.push(ch.spl[j]);
+    const combined = window.globalMeshBuf.subarray(0, totalLen);
+    spl.length = 0;
+    let offset = 0;
+    for(let i = 0; i < activeChunks.length; i++){
+      const ch = activeChunks[i];
+      if(ch && ch.mesh && ch.mesh.length){
+        combined.set(ch.mesh, offset);
+        offset += ch.mesh.length;
+      }
+      if(ch && ch.spl && ch.spl.length){
+        for(let j = 0; j < ch.spl.length; j++) spl.push(ch.spl[j]);
+      }
     }
-  }
 
-  gl.bindBuffer(gl.ARRAY_BUFFER, wbuf);
-  gl.bufferData(gl.ARRAY_BUFFER, combined, gl.DYNAMIC_DRAW);
-  wcount = totalLen / 8;
+    gl.bindBuffer(gl.ARRAY_BUFFER, wbuf);
+    gl.bufferData(gl.ARRAY_BUFFER, combined, gl.DYNAMIC_DRAW);
+    wcount = totalLen / 8;
+  }
   dirty = false;
 }
 function pushBox(a,cx,cy,cz,hx_,hy,hz,rot,k,r,g,b){const c=Math.cos(rot),s=Math.sin(rot);for(let f=0;f<6;f++){const sd=FD[f][4];const vs=FQ[f].map(v=>{const x=(v[0]-.5)*2*hx_,y=(v[1]-.5)*2*hy,z=(v[2]-.5)*2*hz;return[cx+x*c+z*s,cy+y,cz-x*s+z*c]});
@@ -2523,6 +2607,8 @@ function renderNametags(){
         if(!el){
           el = document.createElement('div');
           el.className = 'nametag';
+          el.style.left = '0px';
+          el.style.top = '0px';
           container.appendChild(el);
           _nametagPool.set(q.peer, el);
         }
@@ -2537,8 +2623,7 @@ function renderNametags(){
           el._col = col;
         }
         el.style.display = 'block';
-        el.style.left = sx + 'px';
-        el.style.top = sy + 'px';
+        el.style.transform = 'translate3d(' + sx + 'px,' + sy + 'px,0)';
       }
     }
   }
@@ -2755,7 +2840,11 @@ function render(){
 
   bind(dbuf);
   if(tri.length){
-    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(tri),gl.DYNAMIC_DRAW);
+    if(!window._entityMeshF32 || window._entityMeshF32.length < tri.length){
+      window._entityMeshF32 = new Float32Array(Math.max(tri.length, 65536));
+    }
+    window._entityMeshF32.set(tri);
+    gl.bufferData(gl.ARRAY_BUFFER, window._entityMeshF32.subarray(0, tri.length), gl.DYNAMIC_DRAW);
     gl.drawArrays(gl.TRIANGLES,0,tri.length/8);
   }
 
@@ -2878,7 +2967,11 @@ function setB(x,y,z,id,net){
   if(lx === 15){ const nb = chunks.get((cx+1)+','+cz); if(nb){ nb.dirty = true; } }
   if(lz === 0){ const nb = chunks.get(cx+','+(cz-1)); if(nb){ nb.dirty = true; } }
   if(lz === 15){ const nb = chunks.get(cx+','+(cz+1)); if(nb){ nb.dirty = true; } }
-  dirty = true;
+  // Only trigger local WebGL mesh rebuild if this block is within player active view
+  const pcx_ = Math.floor(pl.p.x / 16), pcz_ = Math.floor(pl.p.z / 16);
+  if(Math.abs(cx - pcx_) <= CH_RADIUS && Math.abs(cz - pcz_) <= CH_RADIUS){
+    dirty = true;
+  }
   if(LIGHT_EMIT.has(id)) registerLight(x, y, z, id === NID.Lava ? 12 : 9);
   else if(id === 0) unregisterLight(x, y, z);
 
@@ -3399,7 +3492,7 @@ function syncMobsMultiplayer(){
     nr.emit('mobs_sync', mobData).catch(()=>{});
   }
 }
-setInterval(syncMobsMultiplayer, 120);
+setInterval(syncMobsMultiplayer, 250);
 function popMobs(){
   const isMeshHost = hostIsRunning || (!nr) || (peersList.length === 0) || (peersList.every(p => myPeerId <= p.peer));
   if(nr && !isMeshHost) return;
@@ -3968,6 +4061,56 @@ class UniversalNetwork {
       this.peers.set(data.peer, p);
       this.triggerPeerUpdate();
     } else {
+      // Server-Side Anti-Cheat Validation for Boba Client (Speed, Flight, Noclip)
+      if(p.curX !== undefined && typeof get === 'function'){
+        const dx = data.x - p.curX, dz = data.z - p.curZ, dy = data.y - p.curY;
+        const distH = Math.hypot(dx, dz);
+        const dt = Math.max(0.04, (now - p.lastSeen) / 1000);
+        const speedH = distH / dt;
+
+        // 1. Anti-Speed (Max sprint is 5.8 bps; allow up to 16.0 for knockback)
+        if(speedH > 16.5 && dt < 1.0){
+          p.speedViolations = (p.speedViolations || 0) + 1;
+          if(p.speedViolations > 3){
+            this.emit('kick', { target: data.peer, name: data.n, reason: 'Anti-Cheat: Speed hack detected.' }).catch(()=>{});
+            this.peers.delete(data.peer);
+            this.triggerPeerUpdate();
+            return;
+          }
+        } else {
+          p.speedViolations = 0;
+        }
+
+        // 2. Anti-Flight (Survival mode continuous ascent in midair)
+        if(!data.dead && dy > 1.3 && data.y > 4 && dt < 0.6){
+          const bx = Math.floor(data.x), by = Math.floor(data.y), bz = Math.floor(data.z);
+          const feetBlock = get(bx, by - 1, bz);
+          const curBlock = get(bx, by, bz);
+          const isClimbing = curBlock === NID.Water || curBlock === NID.Ladder || feetBlock === NID.Water || feetBlock === NID.Ladder;
+          if(!isClimbing && feetBlock === 0){
+            p.flyViolations = (p.flyViolations || 0) + 1;
+            if(p.flyViolations > 4){
+              this.emit('kick', { target: data.peer, name: data.n, reason: 'Anti-Cheat: Flight detected.' }).catch(()=>{});
+              this.peers.delete(data.peer);
+              this.triggerPeerUpdate();
+              return;
+            }
+          }
+        } else {
+          p.flyViolations = 0;
+        }
+
+        // 3. Anti-Noclip (Clipping inside bedrock or stone)
+        if(data.y >= 0 && data.y < H){
+          const headBlock = get(Math.floor(data.x), Math.floor(data.y + 0.8), Math.floor(data.z));
+          if(headBlock === 14){ // Bedrock
+            this.emit('kick', { target: data.peer, name: data.n, reason: 'Anti-Cheat: Noclip through bedrock.' }).catch(()=>{});
+            this.peers.delete(data.peer);
+            this.triggerPeerUpdate();
+            return;
+          }
+        }
+      }
       p.presence = data;
       p.lastSeen = now;
     }
@@ -4188,6 +4331,26 @@ const Host9A = {
   },
   
   resetServer(){
+    if(typeof _saveDebounceTimer !== 'undefined' && _saveDebounceTimer){
+      clearTimeout(_saveDebounceTimer);
+      _saveDebounceTimer = null;
+    }
+    window._serverWiping = true;
+
+    try {
+      localStorage.removeItem('boba_save_server_9a');
+      localStorage.removeItem('boba_pos_server_9a');
+      localStorage.removeItem('boba_chests_server_9a');
+      localStorage.removeItem('boba_furn_server_9a');
+    } catch(e){}
+
+    // Clear local inventory, armor, coordinates and UI hotbar
+    for(let i = 0; i < 36; i++) inv[i] = null;
+    for(let i = 0; i < 4; i++) arm[i] = null;
+    hp = 20; food = 20; savedPos = null;
+    if(typeof hud === 'function') hud();
+    if(typeof renderUI === 'function' && ui) renderUI();
+
     const activeNet = (this.net && this.net.connected) ? this.net : (window.nr && window.nr.connected ? window.nr : null);
     const newSeed = Math.floor(Math.random() * 10);
     MAPN = newSeed;
@@ -4204,16 +4367,11 @@ const Host9A = {
         activeNet.peers.clear();
         activeNet.cleanStalePeers();
       }
-      activeNet.emit('reset_world', { seed: newSeed }).catch(()=>{});
+      activeNet.emit('reset_world', { seed: newSeed, wipe: true }).catch(()=>{});
       activeNet.emit('sync_world', { edits: [], chests: {}, furn: {} }).catch(()=>{});
       activeNet.emit('chat', { from: '[SERVER]', t: 'Server 9A world has been reset to brand new wilderness!', col: '#2ecc71' }).catch(()=>{});
     }
-    try {
-      localStorage.removeItem('boba_save_server_9a');
-      localStorage.removeItem('boba_pos_server_9a');
-      localStorage.removeItem('boba_chests_server_9a');
-      localStorage.removeItem('boba_furn_server_9a');
-    } catch(e){}
+
     edits.clear();
     chunks.clear();
     spawnedVillages.clear();
@@ -4227,12 +4385,8 @@ const Host9A = {
     mobs.length = 0;
     for(const k in chests) delete chests[k];
     for(const k in furn) delete furn[k];
-    for(let i = 0; i < 36; i++) inv[i] = null;
-    for(let i = 0; i < 4; i++) arm[i] = null;
-    hp = 20;
-    food = 20;
-    savedPos = null;
     dirty = true;
+
     if(playing){
       pl.p.copy(spawnPt());
       fy = pl.p.y;
@@ -4241,8 +4395,9 @@ const Host9A = {
       rebuild(true);
     }
     Host9A.log('warn', 'All players kicked and Server 9A world completely reset.');
-    toast('Server 9A reset: all players kicked');
+    toast('Server 9A reset: all players kicked & inventory wiped');
     chatMsg('[SERVER] Server 9A world was completely reset to fresh wilderness!', '#2ecc71');
+    setTimeout(() => { window._serverWiping = false; }, 3000);
   },
   
   joinAsPlayer(){
@@ -4576,19 +4731,34 @@ async function join9A(){
     );
     const isSender = (d && d.fromAdmin && (sessionStorage.getItem('boba_admin') === '1' || myName.toLowerCase() === 'boqn111'));
     if(isMe && !isSender){
-      toast('Kicked: ' + (d.reason || 'Kicked by administrator'));
-      chatMsg('[SERVER] You were kicked: ' + (d.reason || 'Kicked by administrator'), '#ff4444');
+      if(typeof _saveDebounceTimer !== 'undefined' && _saveDebounceTimer){
+        clearTimeout(_saveDebounceTimer); _saveDebounceTimer = null;
+      }
+      window._serverWiping = true;
       try {
         localStorage.removeItem('boba_save_server_9a');
         localStorage.removeItem('boba_pos_server_9a');
+        localStorage.removeItem('boba_chests_server_9a');
+        localStorage.removeItem('boba_furn_server_9a');
       } catch(e){}
-      if(nr){ nr.disconnect(); nr = null; }
+      for(let i=0; i<36; i++) inv[i] = null;
+      for(let i=0; i<4; i++) arm[i] = null;
+      hp = 20; food = 20; savedPos = null;
+      if(typeof hud === 'function') hud();
+      toast('Kicked: ' + (d.reason || 'Kicked by administrator'));
+      chatMsg('[SERVER] You were kicked: ' + (d.reason || 'Kicked by administrator'), '#ff4444');
       playing = false;
-      document.exitPointerLock();
+      if(document.exitPointerLock) document.exitPointerLock();
+      if(nr){ nr.disconnect(); nr = null; }
       show('multi');
+      setTimeout(() => { window._serverWiping = false; }, 3000);
     }
   });
   nr.on('reset_world', d => {
+    if(typeof _saveDebounceTimer !== 'undefined' && _saveDebounceTimer){
+      clearTimeout(_saveDebounceTimer); _saveDebounceTimer = null;
+    }
+    window._serverWiping = true;
     try {
       localStorage.removeItem('boba_save_server_9a');
       localStorage.removeItem('boba_pos_server_9a');
@@ -4597,14 +4767,18 @@ async function join9A(){
     } catch(e){}
     edits.clear(); chunks.clear(); spawnedVillages.clear(); clearAllLights();
     for(const k in chests) delete chests[k]; for(const k in furn) delete furn[k];
+    for(let i=0; i<36; i++) inv[i] = null;
+    for(let i=0; i<4; i++) arm[i] = null;
+    hp = 20; food = 20; savedPos = null;
+    if(typeof hud === 'function') hud();
     drops.length = 0; mobs.length = 0;
     if(d && d.seed !== undefined){ MAPN = d.seed; MAPV = d.seed; }
-    savedPos = null;
     if(playing){
       pl.p.copy(spawnPt()); fy = pl.p.y; pl.v.set(0, 0, 0); gen(); rebuild(true);
     }
-    toast('Server world reset to fresh wilderness!');
+    toast('Server world reset: inventory wiped & wilderness restored!');
     chatMsg('[SERVER] Server world has been reset to fresh wilderness.', '#2ecc71');
+    setTimeout(() => { window._serverWiping = false; }, 3000);
   });
   nr.on('time_sync', d => { if(d && typeof d.tod === 'number'){ tod = d.tod; dayF = 1; toast('The sun rises!'); } });
   nr.on('drop_spawn', d => {
@@ -4619,23 +4793,28 @@ async function join9A(){
   });
   nr.on('mobs_sync', list => {
     if(!Array.isArray(list) || hostIsRunning) return;
-    list.forEach(sm => {
-      let m = mobs.find(q => q.id === sm.id);
+    const incomingIds = new Set();
+    const mobsById = new Map();
+    for(let i = 0; i < mobs.length; i++) mobsById.set(mobs[i].id, mobs[i]);
+    for(let i = 0; i < list.length; i++){
+      const sm = list[i];
+      incomingIds.add(sm.id);
+      let m = mobsById.get(sm.id);
       if(!m){
         const d = MD[sm.type];
-        if(!d) return;
+        if(!d) continue;
         m = { type: sm.type, p: new V3(sm.x, sm.y, sm.z), v: new V3(), hp: sm.hp, dir: 0, tm: 0, w: d[0]/2, h: d[1], atk: 0, ry: sm.ry, id: sm.id };
         mobs.push(m);
+        mobsById.set(sm.id, m);
       } else {
         m.p.set(sm.x, sm.y, sm.z);
         m.hp = sm.hp;
         m.ry = sm.ry;
         m.kb = sm.kb;
       }
-    });
-    // Remove dead/unlisted
+    }
     for(let i = mobs.length - 1; i >= 0; i--){
-      if(!list.some(q => q.id === mobs[i].id)) mobs.splice(i, 1);
+      if(!incomingIds.has(mobs[i].id)) mobs.splice(i, 1);
     }
   });
   nr.onPeers(onPeers);
@@ -4885,6 +5064,7 @@ function scheduleSaveWorldData(wid){
 
 function saveWorldData(wid){
   if(!wid || !playing) return;
+  if(wid === 'server_9a' && window._serverWiping) return;
   try {
     const saveObj = {
       edits: Array.from(edits.entries()),
@@ -4908,6 +5088,12 @@ function saveWorldData(wid){
 }
 
 function loadWorldData(wid){ edits.clear(); chunks.clear(); spawnedVillages.clear(); savedPos = null;
+  if(wid === 'server_9a' && !localStorage.getItem('boba_save_server_9a')){
+    for(let i=0; i<36; i++) inv[i] = null;
+    for(let i=0; i<4; i++) arm[i] = null;
+    hp = 20; food = 20; savedPos = null;
+    if(typeof hud === 'function') hud();
+  }
   try {
     const raw = localStorage.getItem('boba_save_' + wid);
     if(raw){
