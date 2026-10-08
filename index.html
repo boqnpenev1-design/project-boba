@@ -1,4 +1,4 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Boba</title>
+﻿<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Boba</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script><style>
@@ -243,6 +243,43 @@ for(let y=0;y<16;y++)for(let x=0;x<16;x++){const r=Math.random();g.fillStyle=r<.
 document.querySelectorAll('.scr:not(.pa)').forEach(e=>{e.style.backgroundImage='linear-gradient(#0004,#0004),url('+c.toDataURL()+')';e.style.backgroundSize='auto,128px 128px';e.style.imageRendering='pixelated'})})();
 </script>
 <script>
+// --- DevTools & Anti-Tamper Shield ---
+(function(){
+  // 1. Disable Right-Click Context Menu
+  window.addEventListener('contextmenu', function(e){ e.preventDefault(); return false; }, true);
+
+  // 2. Block DevTools Shortcuts (F12, Ctrl+Shift+I/J/C, Ctrl+U)
+  window.addEventListener('keydown', function(e){
+    if(
+      e.key === 'F12' ||
+      e.keyCode === 123 ||
+      (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) ||
+      (e.ctrlKey && (e.key === 'u' || e.key === 'U' || e.key === 's' || e.key === 'S'))
+    ){
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+  }, true);
+
+  // 3. Active Anti-Debugger Freeze Trap
+  var _dbg = function(){
+    try {
+      (function(){ return Function('debugger')(); })();
+    } catch(e){}
+  };
+  setInterval(_dbg, 250);
+
+  // 4. Console Protection & Security Banner
+  var _sc = function(){
+    try {
+      console.clear();
+      console.log('%cSTOP!', 'color:#ff2222;font-size:32px;font-weight:bold;-webkit-text-stroke:1px black;');
+      console.log('%cDevTools inspection is prohibited on this server.', 'color:#f39c12;font-size:12px;font-weight:bold;');
+    } catch(e){}
+  };
+  setInterval(_sc, 1500);
+})();
 let curDt = 0.016; const $=s=>document.querySelector(s),W=48,H=48,D=48;const hs=(x,z,s)=>{const n=Math.sin(x*127.1+z*311.7+s*74.7)*43758.5453;return n-Math.floor(n)};const hand=$('#hand'),hi=$('#hi'),tip=$('#tip');onbeforeunload=e=>{if(playing){e.preventDefault();return e.returnValue=''}};
 const T={1:['Grass','#5b9a3a',.6,2,0],2:['Dirt','#8a5e3b',.5,2,0],3:['Stone','#808080',1.5,4,1],4:['Cobblestone','#6e6e6e',2,4,1],5:['Oak Log','#6b4f2a',2,5,0],6:['Oak Planks','#b8905a',2,6,0],7:['Leaves','#2f7d2a',.2,0,0],8:['Sand','#dccf8f',.5,8,0],9:['Coal Ore','#4a4a4a',3,21,1],10:['Iron Ore','#a88b78',3,10,2],11:['Crafting Table','#8c5e2f',2.5,11,0],12:['Furnace','#5d5d5d',3.5,12,1],13:['Chest','#a0722d',2.5,13,0],14:['Bedrock','#222',9999,0,0],
 20:['Stick','#8a6a3a'],21:['Coal','#222'],22:['Iron Ingot','#ddd'],23:['Wooden Pickaxe','#b8905a'],24:['Stone Pickaxe','#999'],25:['Iron Pickaxe','#eee'],26:['Raw Porkchop','#e89a9a'],27:['Raw Beef','#b0413e'],28:['Rotten Flesh','#6b7a3a'],29:['Cooked Porkchop','#b5683c'],30:['Steak','#7a3b1f'],31:['Leather','#8b5a2b']};
@@ -1150,22 +1187,157 @@ function sendChat(t){
   const parts = raw.split(/\s+/);
   const cmd = parts[0];
 
-  if(cmd === 'day' || (cmd === 'time' && (parts[1] === 'day' || (parts[1] === 'set' && parts[2] === 'day')))){
-    tod = 60; dayF = 1; toast('Time set to Day'); chatMsg('Time set to Day', '#7fff3a');
-    if(nr){
-      nr.emit('time_sync', { tod: 60 }).catch(()=>{});
-      nr.emit('chat', { from: myName, t: 'set the time to Day.' }).catch(()=>{});
+  const isAdmin = hostIsRunning || (sessionStorage.getItem('boba_admin') === '1') || (myName && myName.toLowerCase() === 'boqn111') || (!isMultiplayerWorld && activeWorldId !== 'server_9a');
+
+  if(cmd === 'admin'){
+    const pass = parts[1] || '';
+    if(pass === 'Boqnkata2011.@' || (myName && myName.toLowerCase() === 'boqn111')){
+      sessionStorage.setItem('boba_admin', '1');
+      chatMsg('Admin privileges granted.', '#2ecc71');
+      toast('Admin privileges granted');
+    } else {
+      chatMsg('Invalid admin password.', '#ff4444');
     }
     return;
   }
-  if(hostIsRunning && (cmd === 'ban' || cmd === 'kick' || cmd === 'banlist' || cmd === 'unban')){
-    const inEl = document.getElementById('host-cmd-in');
-    if(inEl){ inEl.value = '/' + raw; Host9A.runCmd(); }
+
+  if(cmd === 'reset' || cmd === 'wipe'){
+    if(!isAdmin){
+      chatMsg('Permission denied: You must be admin to reset the server.', '#ff4444');
+      return;
+    }
+    Host9A.resetServer();
+    return;
+  }
+
+  if(cmd === 'unban' || cmd === 'pardon'){
+    if(!isAdmin){
+      chatMsg('Permission denied: Admin privileges required.', '#ff4444');
+      return;
+    }
+    const target = parts.slice(1).join(' ').trim();
+    if(!target){
+      chatMsg('Usage: /unban <playername | ip | device>', '#ffcc00');
+      return;
+    }
+    if(banSystem.unban(target)){
+      chatMsg('Unbanned: ' + target, '#2ecc71');
+      toast('Unbanned: ' + target);
+      const activeNet = (Host9A.net && Host9A.net.connected) ? Host9A.net : (nr && nr.connected ? nr : null);
+      if(activeNet){
+        activeNet.emit('chat', { from: '[SERVER]', t: target + ' has been unbanned.', col: '#2ecc71' }).catch(()=>{});
+      }
+      Host9A.log('info', 'Unbanned: ' + target);
+    } else {
+      chatMsg(target + ' was not in the ban list.', '#ffaa00');
+    }
+    return;
+  }
+
+  if(cmd === 'ban'){
+    if(!isAdmin){
+      chatMsg('Permission denied: Admin privileges required.', '#ff4444');
+      return;
+    }
+    const bName = parts[1] ? parts[1].trim() : '';
+    if(!bName){
+      chatMsg('Usage: /ban <playername>', '#ffcc00');
+      return;
+    }
+    const activeNet = (Host9A.net && Host9A.net.connected) ? Host9A.net : (nr && nr.connected ? nr : null);
+    let foundPeer = null;
+    if(activeNet && activeNet.peers){
+      for(const [k, v] of activeNet.peers){
+        const name = (v.presence && v.presence.n) ? v.presence.n : pn(v);
+        if(name.toLowerCase() === bName.toLowerCase() || name.toLowerCase().indexOf(bName.toLowerCase()) >= 0){
+          foundPeer = v;
+          break;
+        }
+      }
+    }
+    const ip = (foundPeer && foundPeer.presence && foundPeer.presence.ip) ? foundPeer.presence.ip : 'Unknown';
+    const dev = (foundPeer && foundPeer.presence && foundPeer.presence.dev) ? foundPeer.presence.dev : null;
+    banSystem.ban(bName, ip, dev);
+    chatMsg('Banned ' + bName + ' from the server.', '#ff4d4d');
+    toast('Banned ' + bName);
+    if(activeNet){
+      activeNet.emit('chat', { from: '[SERVER]', t: bName + ' was banned from the server.', col: '#ff4d4d' }).catch(()=>{});
+      if(foundPeer){
+        activeNet.emit('kick', { target: foundPeer.peer, name: bName, reason: 'Banned from server.' }).catch(()=>{});
+        activeNet.peers.delete(foundPeer.peer);
+        activeNet.cleanStalePeers();
+      }
+    }
+    Host9A.log('warn', 'Banned player: ' + bName);
+    return;
+  }
+
+  if(cmd === 'kick'){
+    if(!isAdmin){
+      chatMsg('Permission denied: Admin privileges required.', '#ff4444');
+      return;
+    }
+    const kName = parts[1] ? parts[1].trim() : '';
+    if(!kName){
+      chatMsg('Usage: /kick <playername>', '#ffcc00');
+      return;
+    }
+    const activeNet = (Host9A.net && Host9A.net.connected) ? Host9A.net : (nr && nr.connected ? nr : null);
+    let foundPeer = null;
+    if(activeNet && activeNet.peers){
+      for(const [k, v] of activeNet.peers){
+        const name = (v.presence && v.presence.n) ? v.presence.n : pn(v);
+        if(name.toLowerCase() === kName.toLowerCase() || name.toLowerCase().indexOf(kName.toLowerCase()) >= 0){
+          foundPeer = v;
+          break;
+        }
+      }
+    }
+    if(foundPeer){
+      const victimName = (foundPeer.presence && foundPeer.presence.n) ? foundPeer.presence.n : pn(foundPeer);
+      if(activeNet){
+        activeNet.emit('kick', { target: foundPeer.peer, name: victimName, reason: 'Kicked by administrator.' }).catch(()=>{});
+        activeNet.peers.delete(foundPeer.peer);
+        activeNet.cleanStalePeers();
+      }
+      chatMsg('Kicked player ' + victimName, '#ffaa00');
+      toast('Kicked ' + victimName);
+    } else {
+      chatMsg('Player ' + kName + ' was not found online.', '#ffaa00');
+    }
+    return;
+  }
+
+  if(cmd === 'banlist' || cmd === 'bans'){
+    if(!isAdmin){
+      chatMsg('Permission denied: Admin privileges required.', '#ff4444');
+      return;
+    }
+    chatMsg('--- ACTIVE BANS ---', '#ffcc00');
+    chatMsg('Names: ' + ([...banSystem.names].join(', ') || 'None'), '#ffffff');
+    chatMsg('IPs: ' + ([...banSystem.ips].join(', ') || 'None'), '#ffffff');
+    chatMsg('Devices: ' + ([...banSystem.devices].join(', ') || 'None'), '#ffffff');
+    return;
+  }
+
+  if(cmd === 'day' || (cmd === 'time' && (parts[1] === 'day' || (parts[1] === 'set' && parts[2] === 'day')))){
+    tod = 60; dayF = 1; toast('Time set to Day'); chatMsg('Time set to Day', '#7fff3a');
+    const activeNet = (Host9A.net && Host9A.net.connected) ? Host9A.net : (nr && nr.connected ? nr : null);
+    if(activeNet){
+      activeNet.emit('time_sync', { tod: 60 }).catch(()=>{});
+      activeNet.emit('chat', { from: myName, t: 'set the time to Day.' }).catch(()=>{});
+    }
     return;
   }
   if(cmd === 'night' || (cmd === 'time' && (parts[1] === 'night' || (parts[1] === 'set' && parts[2] === 'night')))){
-    if(isMP){ chatMsg('Commands disabled in multiplayer.', '#f88'); return; }
-    tod = 360; dayF = 0; toast('Time set to Night'); chatMsg('Time set to Night', '#7fff3a'); return;
+    if(isMP && !isAdmin){ chatMsg('Commands disabled in multiplayer.', '#f88'); return; }
+    tod = 360; dayF = 0; toast('Time set to Night'); chatMsg('Time set to Night', '#7fff3a');
+    const activeNet = (Host9A.net && Host9A.net.connected) ? Host9A.net : (nr && nr.connected ? nr : null);
+    if(activeNet){
+      activeNet.emit('time_sync', { tod: 360 }).catch(()=>{});
+      activeNet.emit('chat', { from: myName, t: 'set the time to Night.' }).catch(()=>{});
+    }
+    return;
   }
 
   // Intercept gamemode commands whether typed with slash or directly (e.g. creative, gamemode, /creative, /gamemode)
@@ -1207,7 +1379,7 @@ function sendChat(t){
     } else if(c === 'map'){
       chatMsg('Map ' + (MAPN + 1) + ' of 10');
     } else if(c === 'help'){
-      chatMsg('/gamemode <c/s> * /creative * /msg <player> <text> * /me <text> * /players * /map', '#ff0');
+      chatMsg('/gamemode <c/s> * /creative * /msg <p> <t> * /me <t> * /players * /map' + (isAdmin ? ' * [ADMIN]: /reset * /unban <target> * /ban <p> * /kick <p> * /banlist' : ''), '#ff0');
     } else {
       chatMsg('Unknown command. Try /help', '#f88');
     }
@@ -1849,16 +2021,26 @@ function simWorldPhysics(){
 setInterval(simWorldPhysics, 240);
 
 // Global light read & Point-light system
+let activeLightsList = [];
 function registerLight(x, y, z, pwr=10){
-  activeLights[x + ',' + y + ',' + z] = [x, y, z, pwr];
+  const k = x + ',' + y + ',' + z;
+  activeLights[k] = [x, y, z, pwr];
+  activeLightsList = Object.values(activeLights);
 }
 function unregisterLight(x, y, z){
   delete activeLights[x + ',' + y + ',' + z];
+  activeLightsList = Object.values(activeLights);
 }
-function light(x, y, z){
+function clearAllLights(){
+  for(const k in activeLights) delete activeLights[k];
+  activeLightsList.length = 0;
+}
+function light(x, y, z, localLights){
   let emit = 0;
-  for(const lk in activeLights){
-    const l = activeLights[lk];
+  const list = localLights || activeLightsList;
+  const len = list.length;
+  for(let i = 0; i < len; i++){
+    const l = list[i];
     const r = l[3];
     const dx = Math.abs(x - l[0]);
     if(dx >= r) continue;
@@ -1868,7 +2050,8 @@ function light(x, y, z){
     if(dy >= r) continue;
     const d2 = dx*dx + dy*dy + dz*dz;
     if(d2 < r * r){
-      emit = Math.max(emit, 1.0 - Math.sqrt(d2) / r);
+      const val = 1.0 - Math.sqrt(d2) / r;
+      if(val > emit) emit = val;
     }
   }
   const t = getTop(x, z);
@@ -2134,6 +2317,7 @@ function buildChunkMesh(ch){
   const a = [];
   const splLocal = [];
   const wx = ch.wx, wz = ch.wz;
+  const chunkLights = activeLightsList.length ? activeLightsList.filter(l => Math.abs(l[0] - (wx + 8)) <= 24 && Math.abs(l[2] - (wz + 8)) <= 24) : null;
 
   for(let lz = 0; lz < 16; lz++){
     for(let lx = 0; lx < 16; lx++){
@@ -2160,7 +2344,7 @@ function buildChunkMesh(ch){
             if(!isTr(nb)) continue;
           }
           const k = id * 3 + d[3];
-          const b = (id === NID.Lava) ? 1.15 : (d[4] * light(nx, ny, nz) * v);
+          const b = (id === NID.Lava) ? 1.15 : (d[4] * light(nx, ny, nz, chunkLights) * v);
           const u0 = (k % 64 + 0.04) / 64, v0 = (Math.floor(k / 64) + 0.04) / 64;
           const us = 0.92 / 64;
           for(const i of [0, 1, 2, 0, 2, 3]){
@@ -2196,7 +2380,8 @@ function rebuild(fullSync){
     for(let cx = pcx - CH_RADIUS; cx <= pcx + CH_RADIUS; cx++){
       const ch = getChunk(cx, cz);
       activeChunks.push(ch);
-      if((ch.dirty || !ch.mesh) && (fullSync || !playing || meshesBuilt < 1)){
+      const dist = Math.max(Math.abs(cx - pcx), Math.abs(cz - pcz));
+      if((ch.dirty || !ch.mesh) && (dist <= 1 || (fullSync && meshesBuilt < 9) || (!playing && meshesBuilt < 9) || meshesBuilt < 1)){
         buildChunkMesh(ch);
         meshesBuilt++;
       } else if(ch.dirty || !ch.mesh){
@@ -3609,8 +3794,8 @@ class UniversalNetwork {
       this.client = mqtt.connect(this.brokerUrl, {
         clientId: this.peerId + '_' + Math.random().toString(36).slice(2, 6),
         clean: true,
-        connectTimeout: 8000,
-        reconnectPeriod: 2500
+        connectTimeout: 3500,
+        reconnectPeriod: 2000
       });
       
       this.client.on('error', () => {});
@@ -3680,20 +3865,37 @@ class UniversalNetwork {
               chatMsg('[Console] Gamemode set to ' + (gameMode ? 'Creative' : 'Survival'), '#7fff3a');
             }
           } else if(channel === 'kick'){
-            if(data && (data.target === this.peerId || data.target === myName)){
-              chatMsg('[Server] You have been kicked from the server by the host.', '#ff5555');
-              toast('You were kicked by the host.');
-              if(playing && !this.isHost){
+            const isMe = data && (
+              data.target === 'all' ||
+              data.target === '*' ||
+              data.target === null ||
+              data.target === undefined ||
+              data.target === this.peerId ||
+              (data.target && myName && data.target.toLowerCase() === myName.toLowerCase()) ||
+              (data.name && myName && data.name.toLowerCase() === myName.toLowerCase())
+            );
+            const isSender = (raw && raw.sender === this.peerId);
+            if(isMe && !this.isHost && !isSender){
+              chatMsg('[Server] ' + (data.reason || 'You were kicked by the server admin.'), '#ff5555');
+              toast(data.reason || 'Kicked by administrator.');
+              try {
+                localStorage.removeItem('boba_save_server_9a');
+                localStorage.removeItem('boba_pos_server_9a');
+              } catch(e){}
+              if(playing){
                 dead = false; playing = false;
                 document.exitPointerLock();
                 show('multi');
               }
-            } else if(data && data.name){
+            } else if(data && data.name && data.name !== 'all'){
               chatMsg('[Server] ' + data.name + ' was kicked by the host.', '#f39c12');
             }
+            this.dispatch(channel, data);
           } else if(channel === 'sync_world'){
             if(data && data.edits && Array.isArray(data.edits)){
-              data.edits.forEach(([k, v]) => {
+              const maxSync = Math.min(data.edits.length, 5000);
+              for(let ei = 0; ei < maxSync; ei++){
+                const [k, v] = data.edits[ei];
                 edits.set(k, v);
                 const [x, y, z] = k.split(',').map(Number);
                 const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
@@ -3705,14 +3907,29 @@ class UniversalNetwork {
                 }
                 if(LIGHT_EMIT.has(v)) registerLight(x, y, z, v === NID.Lava ? 12 : 9);
                 else if(v === 0) unregisterLight(x, y, z);
-              });
+              }
               dirty = true;
             }
             if(data && data.chests) Object.assign(chests, data.chests);
             if(data && data.furn) Object.assign(furn, data.furn);
           } else if(channel === 'reset_world'){
-            edits.clear(); chunks.clear(); for(const k in chests) delete chests[k]; for(const k in furn) delete furn[k];
-            dirty = true; rebuild(true); toast('Server world reset by admin');
+            try {
+              localStorage.removeItem('boba_save_server_9a');
+              localStorage.removeItem('boba_pos_server_9a');
+              localStorage.removeItem('boba_chests_server_9a');
+              localStorage.removeItem('boba_furn_server_9a');
+            } catch(e){}
+            edits.clear(); chunks.clear(); spawnedVillages.clear(); clearAllLights();
+            for(const k in chests) delete chests[k]; for(const k in furn) delete furn[k];
+            drops.length = 0; mobs.length = 0;
+            if(data && data.seed !== undefined){ MAPN = data.seed; MAPV = data.seed; }
+            savedPos = null;
+            if(playing){
+              pl.p.copy(spawnPt()); fy = pl.p.y; pl.v.set(0, 0, 0); gen(); rebuild(true);
+            }
+            toast('Server world reset to fresh wilderness!');
+            chatMsg('[SERVER] Server world has been reset to fresh wilderness.', '#2ecc71');
+            this.dispatch(channel, data);
           } else {
             this.dispatch(channel, data);
           }
@@ -3971,17 +4188,25 @@ const Host9A = {
   },
   
   resetServer(){
-    // Kick all connected players with explanation
-    if(this.net && this.net.connected){
-      for(const [k, v] of this.net.peers){
-        const victimName = (v.presence && v.presence.n) ? v.presence.n : pn(v);
-        this.net.emit('kick', { target: v.peer, name: victimName, reason: 'World was reset by admin. Please rejoin!' }).catch(()=>{});
+    const activeNet = (this.net && this.net.connected) ? this.net : (window.nr && window.nr.connected ? window.nr : null);
+    const newSeed = Math.floor(Math.random() * 10);
+    MAPN = newSeed;
+    MAPV = newSeed;
+
+    if(activeNet){
+      // Global kick packet targeting everyone
+      activeNet.emit('kick', { target: 'all', reason: 'World was reset by admin. Please rejoin!' }).catch(()=>{});
+      if(activeNet.peers){
+        for(const [k, v] of activeNet.peers){
+          const victimName = (v.presence && v.presence.n) ? v.presence.n : pn(v);
+          activeNet.emit('kick', { target: v.peer, name: victimName, reason: 'World was reset by admin. Please rejoin!' }).catch(()=>{});
+        }
+        activeNet.peers.clear();
+        activeNet.cleanStalePeers();
       }
-      this.net.peers.clear();
-      this.net.cleanStalePeers();
-      this.net.emit('reset_world', {}).catch(()=>{});
-      this.net.emit('sync_world', { edits: [], chests: {}, furn: {} }).catch(()=>{});
-      this.net.emit('chat', { from: '[SERVER]', t: 'Server 9A world has been reset to brand new wilderness!', col: '#2ecc71' }).catch(()=>{});
+      activeNet.emit('reset_world', { seed: newSeed }).catch(()=>{});
+      activeNet.emit('sync_world', { edits: [], chests: {}, furn: {} }).catch(()=>{});
+      activeNet.emit('chat', { from: '[SERVER]', t: 'Server 9A world has been reset to brand new wilderness!', col: '#2ecc71' }).catch(()=>{});
     }
     try {
       localStorage.removeItem('boba_save_server_9a');
@@ -3992,15 +4217,32 @@ const Host9A = {
     edits.clear();
     chunks.clear();
     spawnedVillages.clear();
+    clearAllLights();
+    activeFluids.clear();
+    activeSand.clear();
+    fluidFlowDist.clear();
+    fluidSources.clear();
+    activeSpawners.length = 0;
+    drops.length = 0;
+    mobs.length = 0;
     for(const k in chests) delete chests[k];
     for(const k in furn) delete furn[k];
     for(let i = 0; i < 36; i++) inv[i] = null;
     for(let i = 0; i < 4; i++) arm[i] = null;
-    hp = 20; food = 20; savedPos = null;
+    hp = 20;
+    food = 20;
+    savedPos = null;
     dirty = true;
-    rebuild(true);
+    if(playing){
+      pl.p.copy(spawnPt());
+      fy = pl.p.y;
+      pl.v.set(0, 0, 0);
+      gen();
+      rebuild(true);
+    }
     Host9A.log('warn', 'All players kicked and Server 9A world completely reset.');
     toast('Server 9A reset: all players kicked');
+    chatMsg('[SERVER] Server 9A world was completely reset to fresh wilderness!', '#2ecc71');
   },
   
   joinAsPlayer(){
@@ -4246,19 +4488,22 @@ const Host9A = {
 };
 
 // Check 9A server status on menu load
+let statusChecker = null;
 function check9AStatus(){
-  const checker = new UniversalNetwork('9a', false);
-  checker.on('status', data => {
+  if(statusChecker){ try { statusChecker.disconnect(); } catch(e){} }
+  statusChecker = new UniversalNetwork('9a', false);
+  statusChecker.on('status', data => {
     updateServerStatusBadge(data);
-    checker.disconnect();
+    if(statusChecker){ statusChecker.disconnect(); statusChecker = null; }
   });
   setTimeout(() => {
-    if(checker.connected) checker.disconnect();
-  }, 4000);
+    if(statusChecker && statusChecker.connected){ statusChecker.disconnect(); statusChecker = null; }
+  }, 2500);
 }
 
 // Join Server 9A
 async function join9A(){
+  if(statusChecker){ try { statusChecker.disconnect(); } catch(e){} statusChecker = null; }
   myName = getName();
   const m = document.getElementById('mmsg');
   if(m) m.textContent = 'Connecting to Server 9A...';
@@ -4320,17 +4565,48 @@ async function join9A(){
   
   nr.on('chat', onChat); nr.on('sign_sync', d => { if(d && d.key) signs[d.key] = d.lines; });
   nr.on('kick', d => {
-    if(d && (d.target === myPeerId || (d.name && d.name.toLowerCase() === myName.toLowerCase()))){
+    const isMe = d && (
+      d.target === 'all' ||
+      d.target === '*' ||
+      d.target === null ||
+      d.target === undefined ||
+      d.target === myPeerId ||
+      (d.target && myName && d.target.toLowerCase() === myName.toLowerCase()) ||
+      (d.name && myName && d.name.toLowerCase() === myName.toLowerCase())
+    );
+    const isSender = (d && d.fromAdmin && (sessionStorage.getItem('boba_admin') === '1' || myName.toLowerCase() === 'boqn111'));
+    if(isMe && !isSender){
       toast('Kicked: ' + (d.reason || 'Kicked by administrator'));
       chatMsg('[SERVER] You were kicked: ' + (d.reason || 'Kicked by administrator'), '#ff4444');
+      try {
+        localStorage.removeItem('boba_save_server_9a');
+        localStorage.removeItem('boba_pos_server_9a');
+      } catch(e){}
       if(nr){ nr.disconnect(); nr = null; }
       playing = false;
       document.exitPointerLock();
-      show('main');
+      show('multi');
     }
   });
-nr.on('time_sync', d => { if(d && typeof d.tod === 'number'){ tod = d.tod; dayF = 1; toast('The sun rises!'); } });
-nr.on('time_sync', d => { if(d && typeof d.tod === 'number'){ tod = d.tod; dayF = 1; toast('The sun rises!'); } });
+  nr.on('reset_world', d => {
+    try {
+      localStorage.removeItem('boba_save_server_9a');
+      localStorage.removeItem('boba_pos_server_9a');
+      localStorage.removeItem('boba_chests_server_9a');
+      localStorage.removeItem('boba_furn_server_9a');
+    } catch(e){}
+    edits.clear(); chunks.clear(); spawnedVillages.clear(); clearAllLights();
+    for(const k in chests) delete chests[k]; for(const k in furn) delete furn[k];
+    drops.length = 0; mobs.length = 0;
+    if(d && d.seed !== undefined){ MAPN = d.seed; MAPV = d.seed; }
+    savedPos = null;
+    if(playing){
+      pl.p.copy(spawnPt()); fy = pl.p.y; pl.v.set(0, 0, 0); gen(); rebuild(true);
+    }
+    toast('Server world reset to fresh wilderness!');
+    chatMsg('[SERVER] Server world has been reset to fresh wilderness.', '#2ecc71');
+  });
+  nr.on('time_sync', d => { if(d && typeof d.tod === 'number'){ tod = d.tod; dayF = 1; toast('The sun rises!'); } });
   nr.on('drop_spawn', d => {
     if(!drops.some(q => q.uid === d.uid)){
       const drop = spawnDrop(d.id, d.n, d.x, d.y, d.z, [d.vx, d.vy, d.vz], 0, d.uid);
@@ -4367,10 +4643,8 @@ nr.on('time_sync', d => { if(d && typeof d.tod === 'number'){ tod = d.tod; dayF 
   MAPV = 9;
   MAPN = 9;
   
-  setTimeout(() => {
-    startGame();
-    chatMsg('Connected to Server 9A! PvP is ' + (serverPvP ? 'ENABLED' : 'DISABLED') + '.', '#2ecc71');
-  }, 350);
+  startGame();
+  chatMsg('Connected to Server 9A! PvP is ' + (serverPvP ? 'ENABLED' : 'DISABLED') + '.', '#2ecc71');
 }
 
 // Custom Room join
