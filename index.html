@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Boba</title>
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Boba</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script><style>
@@ -92,9 +92,9 @@ input{background:#333;cursor:text}button:hover{background:#5f86d6}
   <input id="pn" placeholder="Your name" maxlength="16">
   <button data-a="start">Singleplayer</button>
   <button data-a="mp" style="background:#2980b9;border-color:#1f618d">Multiplayer (Server 9A)</button>
-  <button data-a="host" style="background:#27ae60;border-color:#1e8449">âš¡ Aternos Server Host</button>
+  <button data-a="host" style="background:#27ae60;border-color:#1e8449">⚡ Aternos Server Host</button>
   <button data-a="setm">Settings</button>
-  <div class="sm">1.16.5-inspired â€¢ WASD, mouse, E inventory â€¢ T chat â€¢ F5 camera</div>
+  <div class="sm">1.16.5-inspired • WASD, mouse, E inventory • T chat • F5 camera</div>
 </div>
 
 <div id="multi" class="scr hid">
@@ -542,7 +542,7 @@ function applyEnchantment(opt){
   for(let k = 0; k < 12; k++){
     spawnDrop(-2, 1, pl.p.x + (Math.random() - .5) * .8, pl.p.y + 0.5, pl.p.z + (Math.random() - .5) * .8);
   }
-  toast('Enchanted with ' + opt.enchName + '! âœ¨');
+  toast('Enchanted with ' + opt.enchName + '! ✨');
   updateEnchantOptions();
   renderUI();
 }
@@ -1269,7 +1269,7 @@ function sendChat(t){
   if(nr) nr.emit('chat', { from: myName, t }).catch(()=>{});
 }
 ci.addEventListener('keydown',e=>{e.stopPropagation();if(e.key=='Enter'){const v=ci.value;closeChat();sendChat(v)}else if(e.key=='Escape')closeChat()});
-function onChat(d){const me=peersList.find(q=>q.isMe);if(d.to&&(!me||d.to!==me.peer))return;const f=String(d.from||'?').slice(0,16),t=String(d.t||'').slice(0,200);chatMsg(d.me?'* '+f+' '+t:d.to?'['+f+' → you] '+t:'<'+f+'> '+t,d.to?'#d9a0ff':null)}
+function onChat(d){const me=peersList.find(q=>q.isMe);if(d.to&&(!me||d.to!==me.peer))return;const f=String(d.from||'?').slice(0,16),t=String(d.t||'').slice(0,200);chatMsg(d.me?'* '+f+' '+t:d.to?'['+f+' ? you] '+t:'<'+f+'> '+t,d.to?'#d9a0ff':null)}
 const peerActionTimes = new Map();
 function onPeers(c){
   peersList=c.peers;
@@ -1850,9 +1850,9 @@ function simWorldPhysics(){
       }
     }
   }
-  // Fluid Flow (Strict horizontal limit: 7 for water, 4 for lava, infinite downward)
+  // Fluid Flow (Expands horizontally and downwards; holes/drops do not freeze lateral spread)
   if(activeFluids.size > 0){
-    const fluidBatch = Array.from(activeFluids).slice(0, 6);
+    const fluidBatch = Array.from(activeFluids).slice(0, 24);
     for(const k of fluidBatch){
       activeFluids.delete(k);
       const [fx, fy, fz] = k.split(',').map(Number);
@@ -1860,10 +1860,9 @@ function simWorldPhysics(){
       if(b !== NID.Water && b !== NID.Lava) continue;
       const isSrc = fluidSources.has(k) || (fy <= 22);
       const curDist = isSrc ? 0 : (fluidFlowDist.get(k) || 1);
-      // Fluid spread: 7 for water (diamond pattern), 4 for lava
       const maxDist = (b === NID.Water) ? 7 : 4;
       
-      const below = get(fx, fy - 1, fz);
+      const below = (fy > 0) ? get(fx, fy - 1, fz) : 1;
       if(below === 0 && fy > 1){
         const bk = fx + ',' + (fy - 1) + ',' + fz;
         setB(fx, fy - 1, fz, b);
@@ -1873,18 +1872,26 @@ function simWorldPhysics(){
         setB(fx, fy - 1, fz, 4);
       } else if(b === NID.Lava && below === NID.Water){
         setB(fx, fy - 1, fz, 3);
-      } else if(curDist < maxDist && (below !== 0)){
+      }
+
+      // Horizontal spread continues even if there is a hole or water drops down
+      if(curDist < maxDist){
         const cardDirs = [[1,0], [-1,0], [0,1], [0,-1]];
         for(const [dx, dz] of cardDirs){
           const nx = fx + dx, nz = fz + dz;
           const adj = get(nx, fy, nz);
           const nk = nx + ',' + fy + ',' + nz;
+          const nextDist = curDist + 1;
+          const existingDist = fluidFlowDist.get(nk);
           if(adj === 0){
             setB(nx, fy, nz, b);
-            fluidFlowDist.set(nk, curDist + 1);
-            if(curDist + 1 < maxDist || get(nx, fy - 1, nz) === 0){
+            fluidFlowDist.set(nk, nextDist);
+            if(nextDist < maxDist || (fy > 1 && get(nx, fy - 1, nz) === 0)){
               activeFluids.add(nk);
             }
+          } else if(adj === b && existingDist !== undefined && existingDist > nextDist){
+            fluidFlowDist.set(nk, nextDist);
+            activeFluids.add(nk);
           } else if(b === NID.Water && adj === NID.Lava){
             setB(nx, fy, nz, 4);
           } else if(b === NID.Lava && adj === NID.Water){
@@ -2216,10 +2223,41 @@ function buildChunkMesh(ch){
             nb = get(nx, ny, nz);
           }
           const isTr = b => !b || TR.has(b) || GLS.has(b) || NON_FULL.has(b) || (b > 14 && b < 18);
-          if(id === NID.Water && nb !== 0) continue;
-          if(nb){
-            if(id === nb && (id === NID.Water || GLS.has(id) || TR.has(id))) continue;
-            if(!isTr(nb)) continue;
+          const isFluid = (id === NID.Water || id === NID.Lava);
+          let selfFluidH = 1.0, nbFluidH = 0.0;
+          if(isFluid){
+            const hasFluidAbove = (y + 1 < H) && (get(x, y + 1, z) === id);
+            const k = x + ',' + y + ',' + z;
+            const isSrc = fluidSources.has(k) || (y <= 22);
+            const curD = isSrc ? 0 : (fluidFlowDist.get(k) || 1);
+            const maxD = (id === NID.Water) ? 7 : 4;
+            selfFluidH = hasFluidAbove ? 1.0 : (isSrc ? 1.0 : Math.max(0.20, 1.0 - (curD / (maxD + 0.5)) * 0.80));
+
+            if(f === 2){ // Top face (+Y)
+              if(hasFluidAbove) continue; // Submerged inside vertical column
+              if(nb && !isTr(nb)) continue; // Covered by solid block above
+            } else if(f === 3){ // Bottom face (-Y)
+              if(nb === id) continue; // Continuous fluid downward
+              if(nb && !isTr(nb)) continue; // Sitting on solid ground
+            } else { // Side face (f === 0, 1, 4, 5)
+              if(nb === id){
+                const nbHasFluidAbove = (y + 1 < H) && (get(nx, y + 1, nz) === id);
+                const nk = nx + ',' + y + ',' + nz;
+                const nbIsSrc = fluidSources.has(nk) || (y <= 22);
+                const nbD = nbIsSrc ? 0 : (fluidFlowDist.get(nk) || 1);
+                nbFluidH = nbHasFluidAbove ? 1.0 : (nbIsSrc ? 1.0 : Math.max(0.20, 1.0 - (nbD / (maxD + 0.5)) * 0.80));
+                // If neighbor fluid is as tall or taller, side is hidden; otherwise draw step skirt to close gap!
+                if(selfFluidH <= nbFluidH + 0.001) continue;
+              } else {
+                if(nb && !isTr(nb)) continue; // Solid wall
+                nbFluidH = 0.0;
+              }
+            }
+          } else {
+            if(nb){
+              if(id === nb && (GLS.has(id) || TR.has(id))) continue;
+              if(!isTr(nb)) continue;
+            }
           }
           const k = id * 3 + d[3];
           const b = (id === NID.Lava) ? 1.15 : (d[4] * light(nx, ny, nz, chunkLights) * v);
@@ -2229,12 +2267,14 @@ function buildChunkMesh(ch){
             const q = FQ[f][i];
             const uvc = UVC[i];
             let vy = q[1];
-            if((id === NID.Water || id === NID.Lava) && q[1] === 1){
-              const k = x + ',' + y + ',' + z;
-              const isSrc = fluidSources.has(k) || (y <= 22);
-              const curD = isSrc ? 0 : (fluidFlowDist.get(k) || 1);
-              const maxD = (id === NID.Water) ? 7 : 4;
-              vy = isSrc ? 1.0 : Math.max(0.18, 1.0 - (curD / (maxD + 0.5)) * 0.82);
+            if(isFluid){
+              if(f === 2){
+                vy = selfFluidH;
+              } else if(f === 3){
+                vy = 0.0;
+              } else {
+                vy = (q[1] === 1) ? selfFluidH : nbFluidH;
+              }
             }
             if(meshPtr + 8 > meshScratchBuf.length){
               const expanded = new Float32Array(meshScratchBuf.length * 2);
@@ -2686,7 +2726,11 @@ function render(){
     } else if(sb === NID['Oak Sapling']){
       x0 = -0.25; x1 = 0.25; z0 = -0.25; z1 = 0.25; y1 = 0.25;
     } else if(sb === NID.Ladder){
-      z0 = 0.38; z1 = 0.5;
+      const lf = blockFacing.get(r.x + ',' + r.y + ',' + r.z) || 0;
+      if(lf === 0){ z0 = -0.5; z1 = -0.38; x0 = -0.48; x1 = 0.48; }
+      else if(lf === 1){ x0 = 0.38; x1 = 0.5; z0 = -0.48; z1 = 0.48; }
+      else if(lf === 2){ x0 = -0.5; x1 = -0.38; z0 = -0.48; z1 = 0.48; }
+      else { z0 = 0.38; z1 = 0.5; x0 = -0.48; x1 = 0.48; }
     } else if(sb === NID['Flower Pot']){
       x0 = -0.2; x1 = 0.2; z0 = -0.2; z1 = 0.2; y1 = -0.14;
     } else if(sb === NID['Oak Fence']){
@@ -2772,14 +2816,18 @@ function updDrops(dt){
     }
   }
 }
-function setB(x,y,z,id,net){
+function setB(x,y,z,id,net,facing){
   if(y < 1 || y >= H || x < MIN_COORD || x > MAX_COORD || z < MIN_COORD || z > MAX_COORD) return;
   const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
   const ch = getChunk(cx, cz);
   const lx = (x % 16 + 16) % 16, lz = (z % 16 + 16) % 16;
   const oldId = ch.data[lx + lz * 16 + y * 256];
   ch.data[lx + lz * 16 + y * 256] = id;
-  edits.set(x + ',' + y + ',' + z, id);
+  const bk = x + ',' + y + ',' + z;
+  edits.set(bk, id);
+  if(facing !== undefined){
+    blockFacing.set(bk, facing);
+  }
   ch.dirty = true;
   // NEVER set ch.mesh to null! Existing mesh stays visible while rebuild is queued
   if(lx === 0){ const nb = chunks.get((cx-1)+','+cz); if(nb){ nb.dirty = true; } }
@@ -2805,7 +2853,10 @@ function setB(x,y,z,id,net){
     ch.tp[lx + lz * 16] = t;
   }
   triggerFluidSandUpdate(x, y, z);
-  if(!net && nr) nr.emit('blk', {x, y, z, id}).catch(()=>{});
+  if(!net && nr){
+    const fVal = blockFacing.get(bk);
+    nr.emit('blk', {x, y, z, id, facing: fVal}).catch(()=>{});
+  }
 }
 
 // ---------- inventory ----------
@@ -3046,7 +3097,7 @@ function renderUI(){
   const isMP = isMultiplayerWorld || !!nr || (activeWorldId === 'server_9a') || hostIsRunning;
   const cBtn = (!isMP && gameMode === 1) ? '<button onclick="openCreativeInv()" style="width:auto;padding:4px 10px;font-size:11px;background:#2980b9;border-color:#1c5980">Creative Menu</button>' : '';
   const p=$('#ui');p.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h3 style="margin:0">'+ui.title+'</h3>'+cBtn+'</div>';const grid=(a,c,o)=>{const g=document.createElement('div');g.className='gr';g.style.gridTemplateColumns=`repeat(${c},46px)`;a.forEach((_,i)=>g.append(slEl(a,i,r=>clk(a,i,r,o))));return g};
-if(ui.g){const row=document.createElement('div');row.className='row';if(ui.t=='inv')row.append(equip());row.append(grid(ui.g,ui.n),'→');const o=document.createElement('div');o.className='sl';if(ui.o){const t=T[ui.o.id];o.innerHTML=`<i style="${bg(ui.o.id)}"></i><b>${ui.o.n}</b>`}
+if(ui.g){const row=document.createElement('div');row.className='row';if(ui.t=='inv')row.append(equip());row.append(grid(ui.g,ui.n),'?');const o=document.createElement('div');o.className='sl';if(ui.o){const t=T[ui.o.id];o.innerHTML=`<i style="${bg(ui.o.id)}"></i><b>${ui.o.n}</b>`}
 o.onclick=()=>{if(ui.o&&(keys.ShiftLeft||keys.ShiftRight)){for(let k=0;k<64&&ui.o&&fits(ui.o.id,ui.o.n);k++){addItem(ui.o.id,ui.o.n);ui.g.forEach((q,j)=>{if(q&&--q.n<=0)ui.g[j]=null});calc()}renderUI();return}if(ui.o&&(!held||(held.id==ui.o.id&&held.n+ui.o.n<=64))){if(held)held.n+=ui.o.n;else held={...ui.o};ui.g.forEach((s,i)=>{if(s&&--s.n<=0)ui.g[i]=null});calc();renderUI()}};row.append(o);p.append(row)}
 if(ui.f){const f=ui.f,row=document.createElement('div');row.className='row';const a=document.createElement('div');a.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px';
 const fl=document.createElement('div');fl.style.cssText='width:30px;height:30px;position:relative;background:#333;border:2px solid #222;overflow:hidden';fl.innerHTML=`<div style="position:absolute;bottom:0;left:0;right:0;height:${Math.max(0,Math.min(1,f.b/(f.mx||1)))*100}%;background:#ff8a1c"></div>`;
@@ -3056,7 +3107,7 @@ row.append(a,ar,slEl(f.s,2,r=>clk(f.s,2,r,true)));p.append(row)}
 if(ui.t==='anvil'){
   const row=document.createElement('div');row.className='row';
   const a=document.createElement('div');a.style.cssText='display:flex;align-items:center;gap:12px';
-  a.append(slEl(ui.s,0,r=>clk(ui.s,0,r)), document.createTextNode('+'), slEl(ui.s,1,r=>clk(ui.s,1,r)), document.createTextNode('→'), slEl(ui.s,2,()=>{
+  a.append(slEl(ui.s,0,r=>clk(ui.s,0,r)), document.createTextNode('+'), slEl(ui.s,1,r=>clk(ui.s,1,r)), document.createTextNode('?'), slEl(ui.s,2,()=>{
     if(ui.s[2]){held={...ui.s[2]};ui.s[0]=null;ui.s[1]=null;ui.s[2]=null;SFX.click();renderUI();}
   },true));
   row.append(a);p.append(row);
@@ -3274,9 +3325,12 @@ function move(e,dt,w,h){
   }
   // Ladder climbing mechanics
   if(e === pl){
-    const lb1 = get(Math.floor(pl.p.x), Math.floor(pl.p.y), Math.floor(pl.p.z));
-    const lb2 = get(Math.floor(pl.p.x), Math.floor(pl.p.y + 0.8), Math.floor(pl.p.z));
-    if(lb1 === NID.Ladder || lb2 === NID.Ladder){
+    const chkL = (bx, by, bz) => get(Math.floor(bx), Math.floor(by), Math.floor(bz)) === NID.Ladder;
+    const px = pl.p.x, py = pl.p.y, pz = pl.p.z;
+    const isLadder = chkL(px, py, pz) || chkL(px, py + 0.8, pz) ||
+                     chkL(px + 0.35, py, pz) || chkL(px - 0.35, py, pz) ||
+                     chkL(px, py, pz + 0.35) || chkL(px, py, pz - 0.35);
+    if(isLadder){
       if(keys[binds.jump] || keys[binds.fwd]){
         pl.v.y = 3.2; // Climb up!
       } else if(crouch){
@@ -3849,6 +3903,9 @@ class UniversalNetwork {
               for(const ch of dirtyChunks) ch.dirty = true;
               dirty = true;
             }
+            if(data && data.facings && Array.isArray(data.facings)){
+              data.facings.forEach(([k, v]) => blockFacing.set(k, v));
+            }
             if(data && data.chests) Object.assign(chests, data.chests);
             if(data && data.furn) Object.assign(furn, data.furn);
 
@@ -3981,7 +4038,7 @@ function updateServerStatusBadge(data){
     if(badge){ badge.className = 'at-badge at-online'; }
     if(txt){ txt.textContent = 'ONLINE'; }
     if(count){ count.textContent = 'Players: ' + (data.players || 1) + '/20'; }
-    if(pvpLabel){ pvpLabel.textContent = data.pvp ? 'âš”ï¸ PvP: ON' : 'ðŸ›¡ï¸ PvP: OFF'; pvpLabel.style.color = data.pvp ? '#ff6b6b' : '#68d391'; }
+    if(pvpLabel){ pvpLabel.textContent = data.pvp ? '⚔️ PvP: ON' : '🛡️ PvP: OFF'; pvpLabel.style.color = data.pvp ? '#ff6b6b' : '#68d391'; }
     if(motd && data.motd){ motd.textContent = data.motd; }
   } else {
     if(badge){ badge.className = 'at-badge at-offline'; }
@@ -4015,13 +4072,14 @@ const Host9A = {
       this.net.emit('sync_world', {
         target: d && d.target ? d.target : null,
         edits: Array.from(edits.entries()),
+        facings: Array.from(blockFacing.entries()),
         chests,
         furn
       }).catch(()=>{});
     });
     
     this.net.on('blk', d => {
-      setB(d.x, d.y, d.z, d.id, true);
+      setB(d.x, d.y, d.z, d.id, true, d.facing);
       saveWorldData('server_9a');
     });
     
@@ -4328,7 +4386,7 @@ async function join9A(){
       }
     }
 
-    setB(d.x, d.y, d.z, d.id, true);
+    setB(d.x, d.y, d.z, d.id, true, d.facing);
     scheduleSaveWorldData('server_9a');
   });
   
@@ -4341,6 +4399,7 @@ async function join9A(){
       nr.emit('sync_world', {
         target: d && d.target ? d.target : null,
         edits: Array.from(edits.entries()),
+        facings: Array.from(blockFacing.entries()),
         chests,
         furn
       }).catch(()=>{});
@@ -4420,7 +4479,7 @@ async function joinMP(){
   loadWorldData('room_' + code + '_' + myName);
   
   nr = new UniversalNetwork(code, false);
-  nr.on('blk', d => setB(d.x, d.y, d.z, d.id, true));
+  nr.on('blk', d => setB(d.x, d.y, d.z, d.id, true, d.facing));
     nr.on('need', (d) => {
     const isMeshHost = hostIsRunning || (!nr) || (peersList.length === 0) || (peersList.every(p => myPeerId <= p.peer));
     if(isMeshHost && edits.size) nr.emit('edits', { target: d && d.target ? d.target : null, list: [...edits] }).catch(()=>{});
@@ -4548,7 +4607,7 @@ function renderWorldsList(){
     const d = document.createElement('div');
     d.className = 'world-item' + (i === selectedWorldIndex ? ' selected' : '');
     const dateStr = new Date(w.date || Date.now()).toLocaleDateString() + ' ' + new Date(w.date || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    d.innerHTML = `<div class="world-title">${w.name}</div><div class="world-meta">${w.mode ? 'Creative' : 'Survival'} • Seed: ${w.seed || 0} • Played: ${dateStr}</div>`;
+    d.innerHTML = `<div class="world-title">${w.name}</div><div class="world-meta">${w.mode ? 'Creative' : 'Survival'} â€¢ Seed: ${w.seed || 0} â€¢ Played: ${dateStr}</div>`;
     d.onclick = () => { selectedWorldIndex = i; renderWorldsList(); };
     d.ondblclick = () => { selectedWorldIndex = i; playSelectedWorld(); };
     c.appendChild(d);
@@ -4568,7 +4627,7 @@ function playSelectedWorld(){
   flyMode = false;
   loadWorldData(activeWorldId);
   startGame();
-  if(gameMode) toast('Creative Mode — ' + w.name);
+  if(gameMode) toast('Creative Mode - ' + w.name);
   else toast('Loaded ' + w.name);
   updatePauseModeBtn();
 }
@@ -4929,6 +4988,11 @@ else if(e.button==2){
   if(s && s.id === NID.Bucket && (clickedBlock === NID.Water || clickedBlock === NID.Lava)){
     const sk = r.x + ',' + r.y + ',' + r.z;
     const isWater = (clickedBlock === NID.Water);
+    const isSource = fluidSources.has(sk) || (r.y <= 22) || (fluidFlowDist.get(sk) === 0);
+    // Non-source flowing water/lava cannot be picked up with a bucket!
+    if(!isSource){
+      return;
+    }
     // Natural sea or lake water (at/below sea level 22) or surrounded by water regenerates infinitely!
     const isLakeOrSea = isWater && (r.y <= 22);
     let adjWaterCount = 0;
@@ -5102,8 +5166,59 @@ else if(e.button==2){
       cardinal = (fwdZ > 0) ? 0 : 2;
     }
     if(s.id === NID.Ladder && r.x != null){
-      const dx = r.x - x, dz = r.z - z;
-      const lFacing = dx === 1 ? 1 : (dx === -1 ? 3 : (dz === 1 ? 0 : 2));
+      const dx = r.x - x, dy = r.y - y, dz = r.z - z;
+      let lFacing = -1;
+      const isSolidWall = (bx, by, bz) => {
+        const b = get(bx, by, bz);
+        return b && !NS[b] && b !== NID.Water && b !== NID.Lava;
+      };
+
+      // Direct side face click:
+      // dx === 1  -> wall at x+1 (East)  -> ladder flush against East wall (1)
+      // dx === -1 -> wall at x-1 (West)  -> ladder flush against West wall (2)
+      // dz === 1  -> wall at z+1 (South) -> ladder flush against South wall (3)
+      // dz === -1 -> wall at z-1 (North) -> ladder flush against North wall (0)
+      if(dx === 1 && isSolidWall(x + 1, y, z)) lFacing = 1;
+      else if(dx === -1 && isSolidWall(x - 1, y, z)) lFacing = 2;
+      else if(dz === 1 && isSolidWall(x, y, z + 1)) lFacing = 3;
+      else if(dz === -1 && isSolidWall(x, y, z - 1)) lFacing = 0;
+
+      // Top/bottom click or stacking on ladder: find adjacent solid wall by player direction
+      if(lFacing === -1){
+        const candidates = [];
+        if(Math.abs(fwdZ) >= Math.abs(fwdX)){
+          if(fwdZ < 0){
+            candidates.push({face: 0, x: x, z: z - 1});
+            candidates.push(fwdX > 0 ? {face: 1, x: x + 1, z: z} : {face: 2, x: x - 1, z: z});
+          } else {
+            candidates.push({face: 3, x: x, z: z + 1});
+            candidates.push(fwdX > 0 ? {face: 1, x: x + 1, z: z} : {face: 2, x: x - 1, z: z});
+          }
+        } else {
+          if(fwdX > 0){
+            candidates.push({face: 1, x: x + 1, z: z});
+            candidates.push(fwdZ < 0 ? {face: 0, x: x, z: z - 1} : {face: 3, x: x, z: z + 1});
+          } else {
+            candidates.push({face: 2, x: x - 1, z: z});
+            candidates.push(fwdZ < 0 ? {face: 0, x: x, z: z - 1} : {face: 3, x: x, z: z + 1});
+          }
+        }
+        const all = [{face: 0, x: x, z: z - 1}, {face: 1, x: x + 1, z: z}, {face: 2, x: x - 1, z: z}, {face: 3, x: x, z: z + 1}];
+        for(const c of all){
+          if(!candidates.some(cd => cd.face === c.face)) candidates.push(c);
+        }
+        for(const c of candidates){
+          if(isSolidWall(c.x, y, c.z)){
+            lFacing = c.face;
+            break;
+          }
+        }
+      }
+
+      if(lFacing === -1){
+        toast('Ladders must attach to a solid block!');
+        return;
+      }
       blockFacing.set(bk, lFacing);
     } else {
       blockFacing.set(bk, cardinal);
@@ -5319,6 +5434,20 @@ if(id!=14&&br.t>=cNeed){
     br = { k: '', t: 0 };
   } else {
     SFX.breakBlock(id); setB(r.x,r.y,r.z,0);
+    if(id === NID.Ladder){ blockFacing.delete(r.x + ',' + r.y + ',' + r.z); }
+    if(id !== NID.Ladder){
+      const checkAdjL = [
+        {dx: 1, dz: 0, f: 2}, {dx: -1, dz: 0, f: 1}, {dx: 0, dz: 1, f: 0}, {dx: 0, dz: -1, f: 3}
+      ];
+      for(const cal of checkAdjL){
+        const lx = r.x + cal.dx, lz = r.z + cal.dz;
+        if(get(lx, r.y, lz) === NID.Ladder && (blockFacing.get(lx + ',' + r.y + ',' + lz) === cal.f)){
+          setB(lx, r.y, lz, 0);
+          blockFacing.delete(lx + ',' + r.y + ',' + lz);
+          if(!gameMode) spawnDrop(NID.Ladder, 1, lx + 0.5, r.y + 0.5, lz + 0.5);
+        }
+      }
+    }
     if(id === 17 || (T[id] && T[id][0].includes('Sign'))){
       delete signs[r.x + ',' + r.y + ',' + r.z];
     }
