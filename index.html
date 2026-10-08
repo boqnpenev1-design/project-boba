@@ -92,9 +92,9 @@ input{background:#333;cursor:text}button:hover{background:#5f86d6}
   <input id="pn" placeholder="Your name" maxlength="16">
   <button data-a="start">Singleplayer</button>
   <button data-a="mp" style="background:#2980b9;border-color:#1f618d">Multiplayer (Server 9A)</button>
-  <button data-a="host" style="background:#27ae60;border-color:#1e8449">⚡ Aternos Server Host</button>
+  <button data-a="host" style="background:#27ae60;border-color:#1e8449">Ã¢Å¡Â¡ Aternos Server Host</button>
   <button data-a="setm">Settings</button>
-  <div class="sm">1.16.5-inspired • WASD, mouse, E inventory • T chat • F5 camera</div>
+  <div class="sm">1.16.5-inspired Ã¢â‚¬Â¢ WASD, mouse, E inventory Ã¢â‚¬Â¢ T chat Ã¢â‚¬Â¢ F5 camera</div>
 </div>
 
 <div id="multi" class="scr hid">
@@ -542,7 +542,7 @@ function applyEnchantment(opt){
   for(let k = 0; k < 12; k++){
     spawnDrop(-2, 1, pl.p.x + (Math.random() - .5) * .8, pl.p.y + 0.5, pl.p.z + (Math.random() - .5) * .8);
   }
-  toast('Enchanted with ' + opt.enchName + '! ✨');
+  toast('Enchanted with ' + opt.enchName + '! Ã¢Å“Â¨');
   updateEnchantOptions();
   renderUI();
 }
@@ -1200,23 +1200,16 @@ function sendChat(t){
 
 
 
-  if(cmd === 'day' || (cmd === 'time' && (parts[1] === 'day' || (parts[1] === 'set' && parts[2] === 'day')))){
-    tod = 60; dayF = 1; toast('Time set to Day'); chatMsg('Time set to Day', '#7fff3a');
-    const activeNet = (Host9A.net && Host9A.net.connected) ? Host9A.net : (nr && nr.connected ? nr : null);
-    if(activeNet){
-      activeNet.emit('time_sync', { tod: 60 }).catch(()=>{});
-      activeNet.emit('chat', { from: myName, t: 'set the time to Day.' }).catch(()=>{});
+  if(cmd === 'day' || cmd === 'night' || (cmd === 'time' && (parts[1] === 'day' || parts[1] === 'night' || (parts[1] === 'set' && (parts[2] === 'day' || parts[2] === 'night'))))){
+    if(isMP){
+      chatMsg('Commands /day and /night are disabled in multiplayer.', '#ffaa00');
+      return;
     }
-    return;
-  }
-  if(cmd === 'night' || (cmd === 'time' && (parts[1] === 'night' || (parts[1] === 'set' && parts[2] === 'night')))){
-    if(isMP && !isAdmin){ chatMsg('Commands disabled in multiplayer.', '#f88'); return; }
-    tod = 360; dayF = 0; toast('Time set to Night'); chatMsg('Time set to Night', '#7fff3a');
-    const activeNet = (Host9A.net && Host9A.net.connected) ? Host9A.net : (nr && nr.connected ? nr : null);
-    if(activeNet){
-      activeNet.emit('time_sync', { tod: 360 }).catch(()=>{});
-      activeNet.emit('chat', { from: myName, t: 'set the time to Night.' }).catch(()=>{});
-    }
+    const isDay = (cmd === 'day' || parts[1] === 'day' || parts[2] === 'day');
+    tod = isDay ? 60 : 360;
+    dayF = isDay ? 1 : 0;
+    toast('Time set to ' + (isDay ? 'Day' : 'Night'));
+    chatMsg('Time set to ' + (isDay ? 'Day' : 'Night'), '#7fff3a');
     return;
   }
 
@@ -1399,7 +1392,7 @@ const sel={visible:false,position:new V3()};
 const sh=(t,src)=>{const o=gl.createShader(t);gl.shaderSource(o,src);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o};
 const pg=gl.createProgram();
 gl.attachShader(pg,sh(gl.VERTEX_SHADER,'attribute vec3 p;attribute vec2 u;attribute vec3 c;uniform mat4 m;varying vec2 vu;varying vec3 vc;varying float d;void main(){gl_Position=m*vec4(p,1.);vu=u;vc=c;d=gl_Position.w;}'));
-gl.attachShader(pg,sh(gl.FRAGMENT_SHADER,'precision mediump float;uniform sampler2D t;uniform vec2 f;uniform vec3 sk;uniform float br;varying vec2 vu;varying vec3 vc;varying float d;void main(){vec4 tx=texture2D(t,vu);if(tx.a<.5)discard;vec3 col=tx.rgb*vc*br;gl_FragColor=vec4(mix(col,sk,clamp((d-f.x)/(f.y-f.x),0.,1.)),1.);}'));
+gl.attachShader(pg,sh(gl.FRAGMENT_SHADER,'precision mediump float;uniform sampler2D t;uniform vec2 f;uniform vec3 sk;uniform float br;varying vec2 vu;varying vec3 vc;varying float d;void main(){vec4 tx=texture2D(t,vu);if(tx.a<.5)discard;vec3 lightCol=vc*(br*0.82+0.18);vec3 col=tx.rgb*lightCol;float fogF=smoothstep(0.0,1.0,clamp((d-f.x)/(f.y-f.x),0.0,1.0));gl_FragColor=vec4(mix(col,sk,fogF),1.0);}'));
 gl.linkProgram(pg);gl.useProgram(pg);
 const aP=gl.getAttribLocation(pg,'p'),aU=gl.getAttribLocation(pg,'u'),aC=gl.getAttribLocation(pg,'c'),uM=gl.getUniformLocation(pg,'m'),uF=gl.getUniformLocation(pg,'f'),uS=gl.getUniformLocation(pg,'sk'),uB=gl.getUniformLocation(pg,'br');
 const mul=(a,b)=>{const o=new Float32Array(16);for(let i=0;i<4;i++)for(let j=0;j<4;j++){let q=0;for(let k=0;k<4;k++)q+=a[k*4+i]*b[j*4+k];o[j*4+i]=q}return o};
@@ -1964,7 +1957,7 @@ function growTree(x, y, z){
     }
   }
 }
-const FD=[[1,0,0,2,.8],[-1,0,0,2,.8],[0,1,0,0,1],[0,-1,0,1,.5],[0,0,1,2,.7],[0,0,-1,2,.7]],
+const FD=[[1,0,0,2,.6],[-1,0,0,2,.6],[0,1,0,0,1],[0,-1,0,1,.5],[0,0,1,2,.8],[0,0,-1,2,.8]],
 FQ=[[[1,0,1],[1,0,0],[1,1,0],[1,1,1]],[[0,0,0],[0,0,1],[0,1,1],[0,1,0]],[[0,1,1],[1,1,1],[1,1,0],[0,1,0]],[[0,0,0],[1,0,0],[1,0,1],[0,0,1]],[[0,0,1],[1,0,1],[1,1,1],[0,1,1]],[[1,0,0],[0,0,0],[0,1,0],[1,1,0]]];
 const UVC=[[0,1],[1,1],[1,0],[0,0]],tuv=(k,t)=>[(k%64+.04+t[0]*.92)/64,(Math.floor(k/64)+.04+t[1]*.92)/64];
 const wbuf=gl.createBuffer(),dbuf=gl.createBuffer(),tex=gl.createTexture();let wcount=0;const spl=[];const ICON={};
@@ -2432,7 +2425,7 @@ function renderNametags(){
     const x = (q.curX !== undefined ? q.curX : q.presence.x);
     const z = (q.curZ !== undefined ? q.curZ : q.presence.z);
     const dx = x - pl.p.x, dz = z - pl.p.z;
-    if(dx * dx + dz * dz > 2500) continue; // Nametag visible ONLY 50 blocks away max!
+    if(dx * dx + dz * dz > 10000) continue; // Nametag visible up to 100 blocks away!
     const y = (q.curY !== undefined ? q.curY : q.presence.y) + 2.1;
     
     // Exact MVP matrix vector transform
@@ -2480,10 +2473,32 @@ function renderNametags(){
   }
 }
 
+// Precomputed celestial star positions
+const _starOffsets = [];
+for(let si = 0; si < 50; si++){
+  const sa = Math.random() * Math.PI * 2, se = 0.2 + Math.random() * 0.8;
+  const sr = 90;
+  _starOffsets.push([
+    Math.cos(sa) * Math.cos(se) * sr,
+    Math.sin(se) * sr,
+    Math.sin(sa) * Math.cos(se) * sr
+  ]);
+}
+
 function render(){
   gl.viewport(0,0,cv.width,cv.height);
   const isUnderWater = get(Math.floor(pl.p.x), Math.floor(pl.p.y + 1.62), Math.floor(pl.p.z)) === NID.Water;
-  const sk = isUnderWater ? [0.08, 0.25, 0.6] : [.529*dayF+.02,.722*dayF+.02,.941*dayF+.05];
+  
+  // Authentic Minecraft Sky Colors (Azure Day, Golden/Rose Sunset Gradient, Deep Midnight)
+  const sunsetFactor = Math.max(0, 1 - Math.abs(dayF - 0.5) * 4);
+  const daySky = [0.46, 0.68, 1.0];
+  const sunsetSky = [0.96, 0.52, 0.30];
+  const nightSky = [0.04, 0.04, 0.10];
+  const sk = isUnderWater ? [0.08, 0.25, 0.6] : [
+    (daySky[0] * dayF + nightSky[0] * (1 - dayF)) * (1 - sunsetFactor) + sunsetSky[0] * sunsetFactor,
+    (daySky[1] * dayF + nightSky[1] * (1 - dayF)) * (1 - sunsetFactor) + sunsetSky[1] * sunsetFactor,
+    (daySky[2] * dayF + nightSky[2] * (1 - dayF)) * (1 - sunsetFactor) + sunsetSky[2] * sunsetFactor
+  ];
   gl.clearColor(sk[0],sk[1],sk[2],1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);
@@ -2494,7 +2509,7 @@ function render(){
   gl.uniformMatrix4fv(uM,false,mvpMat);
   gl.uniform2f(uF, isUnderWater ? 3 : fogN, isUnderWater ? 18 : fogF);
   gl.uniform3f(uS,sk[0],sk[1],sk[2]);
-    const inCave = pl.p.y < 21 || pl.p.y < getTop(Math.floor(pl.p.x), Math.floor(pl.p.z));
+  const inCave = pl.p.y < 21 || pl.p.y < getTop(Math.floor(pl.p.x), Math.floor(pl.p.z));
   const nightCaveBoost = (inCave && dayF < 0.5) ? (0.22 * (1 - dayF)) : 0;
   gl.uniform1f(uB, isUnderWater ? 0.65 : Math.min(1.0, 0.35 + 0.65 * dayF + nightCaveBoost));
   gl.bindTexture(gl.TEXTURE_2D,tex);
@@ -2503,6 +2518,52 @@ function render(){
   if(wcount){bind(wbuf);gl.drawArrays(gl.TRIANGLES,0,wcount)}
 
   const tri=[],t=performance.now()/1000,L=(x,y,z)=>light(Math.floor(x),Math.floor(y),Math.floor(z));
+
+  // --- Minecraft Celestial Bodies & Atmosphere (Sun, Moon, Stars, Drifting Clouds) ---
+  if(!isUnderWater){
+    const celestialAngle = (tod / 480) * Math.PI * 2 - Math.PI / 2;
+    const cDist = 90;
+    const sunX = p.x + Math.cos(celestialAngle) * cDist;
+    const sunY = p.y + Math.sin(celestialAngle) * cDist;
+    const sunZ = p.z;
+    if(sunY > p.y - 12){
+      // Square Minecraft Sun with soft golden corona
+      pushBox(tri, sunX, sunY, sunZ, 6.0, 6.0, 6.0, 0, 0, 1.0, 0.98, 0.72);
+      pushBox(tri, sunX, sunY, sunZ, 7.5, 7.5, 7.5, 0, 0, 1.0, 0.85, 0.40);
+    }
+    const moonX = p.x - Math.cos(celestialAngle) * cDist;
+    const moonY = p.y - Math.sin(celestialAngle) * cDist;
+    const moonZ = p.z;
+    if(moonY > p.y - 12){
+      // Square Minecraft Moon
+      pushBox(tri, moonX, moonY, moonZ, 5.5, 5.5, 5.5, 0, 0, 0.96, 0.96, 1.0);
+    }
+    // Twinkling Stars at Night
+    if(dayF < 0.65){
+      const starAlpha = (1 - dayF / 0.65);
+      for(let si = 0; si < _starOffsets.length; si++){
+        const so = _starOffsets[si];
+        pushBox(tri, p.x + so[0], p.y + so[1], p.z + so[2], 0.4, 0.4, 0.4, 0, 0, starAlpha, starAlpha, starAlpha);
+      }
+    }
+    // Procedural Minecraft Clouds at y=76 drifting with wind
+    const cloudY = 76;
+    if(p.y < 75){
+      const cloudSpeed = t * 1.2;
+      const cR = 0.92 * dayF + 0.18, cG = 0.92 * dayF + 0.18, cB = 0.98 * dayF + 0.22;
+      const camPcx = Math.floor(p.x / 24), camPcz = Math.floor(p.z / 24);
+      for(let cdx = -3; cdx <= 3; cdx++){
+        for(let cdz = -3; cdz <= 3; cdz++){
+          const cx = (camPcx + cdx) * 24 + (cloudSpeed % 24);
+          const cz = (camPcz + cdz) * 24;
+          const hash = Math.sin((camPcx + cdx) * 12.9898 + (camPcz + cdz) * 78.233) * 43758.5453;
+          if((hash - Math.floor(hash)) > 0.35){
+            pushBox(tri, cx, cloudY, cz, 11.5, 1.2, 11.5, 0, 0, cR, cG, cB);
+          }
+        }
+      }
+    }
+  }
 
   // Render Thrown Eggs
   for(const eg of thrownEggs){
@@ -2648,7 +2709,7 @@ function render(){
     if(q.isMe || !q.presence || q.presence.x == null) continue;
     if(q.presence.dead) continue; // Dead players are not rendered standing
     const pDistSq = (q.presence.x - pl.p.x)**2 + (q.presence.z - pl.p.z)**2;
-    if(pDistSq > 3600) continue; // Distance-cull 3D player models beyond 60 blocks!
+    if(pDistSq > 10000) continue; // Distance-cull 3D player models beyond 100 blocks!
     
     // Position & Angle Interpolation
     if(q.curX === undefined){
@@ -3365,7 +3426,7 @@ function syncMobsMultiplayer(){
     nr.emit('mobs_sync', mobData).catch(()=>{});
   }
 }
-setInterval(syncMobsMultiplayer, 250);
+setInterval(syncMobsMultiplayer, 400);
 function popMobs(){
   const isMeshHost = hostIsRunning || (!nr) || (peersList.length === 0) || (peersList.every(p => myPeerId <= p.peer));
   if(nr && !isMeshHost) return;
@@ -3412,15 +3473,16 @@ function popMobs(){
           const packSize = Math.floor(Math.random() * 2) + 2;
           const centerX = Math.floor(tp.x + rnd(-35, 35));
           const centerZ = Math.floor(tp.z + rnd(-35, 35));
-          if(Math.hypot(centerX - tp.x, centerZ - tp.z) > 12){
+          if(Math.hypot(centerX - tp.x, centerZ - tp.z) > 10){
             for(let p = 0; p < packSize; p++){
               const sx = centerX + Math.floor(rnd(-3, 3));
               const sz = centerZ + Math.floor(rnd(-3, 3));
               const sy = getTop(sx, sz);
-              if(sy >= 23){
-                const bBelow = get(sx, sy - 1, sz);
-                const bAt = get(sx, sy, sz);
-                if((bBelow === 1 || bBelow === 2) && bAt === 0){
+              if(sy >= 10 && sy < H - 2){
+                const bGround = get(sx, sy, sz);
+                const bAir1 = get(sx, sy + 1, sz);
+                const bAir2 = get(sx, sy + 2, sz);
+                if((bGround === 1 || bGround === 2) && bAir1 === 0 && bAir2 === 0){
                   mkMob(t, sx + 0.5, sy + 1.05, sz + 0.5);
                 }
               }
@@ -3437,22 +3499,30 @@ function popMobs(){
       for(const [t, targetN] of hostileList){
         const curTypeCount = mobs.filter(m => m.type === t).length;
         if(curTypeCount < targetN){
-          for(let att = 0; att < 5; att++){
+          for(let att = 0; att < 6; att++){
             const x = Math.floor(tp.x + rnd(-40, 40));
             const z = Math.floor(tp.z + rnd(-40, 40));
             if(Math.hypot(x - tp.x, z - tp.z) > 12){
               if(dayF < 0.55){
-                // Nighttime: surface spawn
+                // Nighttime: surface spawn on solid blocks in darkness
                 const sy = getTop(x, z);
-                if(sy >= 5 && get(x, sy, z) === 0 && get(x, sy - 1, z) !== 0 && get(x, sy - 1, z) !== NID.Water && get(x, sy - 1, z) !== NID.Lava){
-                  mkMob(t, x + 0.5, sy + 1.05, z + 0.5);
-                  break;
+                if(sy >= 10 && sy < H - 2){
+                  const bGround = get(x, sy, z);
+                  const bAir1 = get(x, sy + 1, z);
+                  const bAir2 = get(x, sy + 2, z);
+                  if(bGround !== 0 && bGround !== NID.Water && bGround !== NID.Lava && !NS[bGround] && bAir1 === 0 && bAir2 === 0){
+                    mkMob(t, x + 0.5, sy + 1.05, z + 0.5);
+                    break;
+                  }
                 }
               } else {
-                // Daytime: scan caves from top down for open cavern
+                // Daytime: scan underground caverns
                 const topY = getTop(x, z);
-                for(let sy = Math.min(topY - 3, 30); sy >= 6; sy--){
-                  if(get(x, sy, z) === 0 && get(x, sy + 1, z) === 0 && get(x, sy - 1, z) !== 0 && get(x, sy - 1, z) !== NID.Water && get(x, sy - 1, z) !== NID.Lava){
+                for(let sy = Math.min(topY - 2, 45); sy >= 6; sy--){
+                  const bGround = get(x, sy, z);
+                  const bAir1 = get(x, sy + 1, z);
+                  const bAir2 = get(x, sy + 2, z);
+                  if(bGround !== 0 && bGround !== NID.Water && bGround !== NID.Lava && !NS[bGround] && bAir1 === 0 && bAir2 === 0){
                     mkMob(t, x + 0.5, sy + 1.05, z + 0.5);
                     break;
                   }
@@ -4038,7 +4108,7 @@ function updateServerStatusBadge(data){
     if(badge){ badge.className = 'at-badge at-online'; }
     if(txt){ txt.textContent = 'ONLINE'; }
     if(count){ count.textContent = 'Players: ' + (data.players || 1) + '/20'; }
-    if(pvpLabel){ pvpLabel.textContent = data.pvp ? '⚔️ PvP: ON' : '🛡️ PvP: OFF'; pvpLabel.style.color = data.pvp ? '#ff6b6b' : '#68d391'; }
+    if(pvpLabel){ pvpLabel.textContent = data.pvp ? 'Ã¢Å¡â€Ã¯Â¸Â PvP: ON' : 'Ã°Å¸â€ºÂ¡Ã¯Â¸Â PvP: OFF'; pvpLabel.style.color = data.pvp ? '#ff6b6b' : '#68d391'; }
     if(motd && data.motd){ motd.textContent = data.motd; }
   } else {
     if(badge){ badge.className = 'at-badge at-offline'; }
@@ -4247,16 +4317,10 @@ const Host9A = {
       const isCreative = (modeStr === 'creative' || modeStr === '1' || modeStr === 'c');
       this.net.emit('cmd_gamemode', { target: found.peer, mode: isCreative ? 1 : 0 });
       Host9A.log('info', 'Set ' + targetName + ' to ' + (isCreative ? 'Creative' : 'Survival'));
-    } else if(op === '/day'){
-      tod = 100;
-      if(this.net) this.net.emit('time', { tod: 100 });
-      Host9A.log('info', 'Time set to Day across all players.');
-    } else if(op === '/night'){
-      tod = 350;
-      if(this.net) this.net.emit('time', { tod: 350 });
-      Host9A.log('info', 'Time set to Night across all players.');
+    } else if(op === '/day' || op === '/night'){
+      Host9A.log('warn', 'Time commands /day and /night are disabled in multiplayer.');
     } else {
-      Host9A.log('warn', 'Unknown command. Available: /say, /kick <player>, /pvp on|off, /day, /night, /tp <p1> <p2>, /gamemode <c|s> <p>, /clear');
+      Host9A.log('warn', 'Unknown command. Available: /say, /kick <player>, /pvp on|off, /tp <p1> <p2>, /gamemode <c|s> <p>, /clear');
     }
   },
   
@@ -4607,7 +4671,7 @@ function renderWorldsList(){
     const d = document.createElement('div');
     d.className = 'world-item' + (i === selectedWorldIndex ? ' selected' : '');
     const dateStr = new Date(w.date || Date.now()).toLocaleDateString() + ' ' + new Date(w.date || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    d.innerHTML = `<div class="world-title">${w.name}</div><div class="world-meta">${w.mode ? 'Creative' : 'Survival'} â€¢ Seed: ${w.seed || 0} â€¢ Played: ${dateStr}</div>`;
+    d.innerHTML = `<div class="world-title">${w.name}</div><div class="world-meta">${w.mode ? 'Creative' : 'Survival'} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Seed: ${w.seed || 0} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Played: ${dateStr}</div>`;
     d.onclick = () => { selectedWorldIndex = i; renderWorldsList(); };
     d.ondblclick = () => { selectedWorldIndex = i; playSelectedWorld(); };
     c.appendChild(d);
@@ -5516,18 +5580,26 @@ setInterval(()=>{
   popMobs();
 }, 200);
 
-// 10 Hz Multiplayer Presence Broadcast (Smooth 100ms interval prevents broker queue lag)
+// Event-driven presence broadcast: eliminates MQTT broker congestion and prevents 5+ player join stutter!
+let _lastPresX = 0, _lastPresY = 0, _lastPresZ = 0, _lastPresYaw = 0, _lastPresPitch = 0, _lastPresTime = 0;
 setInterval(()=>{
   if(!playing || !nr) return;
+  const now = performance.now();
   const isSw = hand.classList.contains("sw") || swingTimer > 0;
-  nr.presence({
-    x: +pl.p.x.toFixed(2), y: +pl.p.y.toFixed(2), z: +pl.p.z.toFixed(2),
-    r: +pl.yaw.toFixed(2), p: +pl.pitch.toFixed(2),
-    sw: isSw, n: myName, ip: myPublicIp, dev: myDeviceId, crouching: crouch,
-    dead: !!dead,
-    arm: arm.map(a => a ? a.id : 0), held: cur() ? cur().id : 0
-  }).catch(()=>{});
-}, 100);
+  const moved = Math.hypot(pl.p.x - _lastPresX, pl.p.z - _lastPresZ) > 0.04 || Math.abs(pl.p.y - _lastPresY) > 0.04;
+  const rotated = Math.abs(pl.yaw - _lastPresYaw) > 0.03 || Math.abs(pl.pitch - _lastPresPitch) > 0.03;
+  const heartbeat = (now - _lastPresTime) > 650;
+  if(moved || rotated || isSw || heartbeat){
+    _lastPresX = pl.p.x; _lastPresY = pl.p.y; _lastPresZ = pl.p.z; _lastPresYaw = pl.yaw; _lastPresPitch = pl.pitch; _lastPresTime = now;
+    nr.presence({
+      x: +pl.p.x.toFixed(2), y: +pl.p.y.toFixed(2), z: +pl.p.z.toFixed(2),
+      r: +pl.yaw.toFixed(2), p: +pl.pitch.toFixed(2),
+      sw: isSw, n: myName, ip: myPublicIp, dev: myDeviceId, crouching: crouch,
+      dead: !!dead,
+      arm: arm.map(a => a ? a.id : 0), held: cur() ? cur().id : 0
+    }).catch(()=>{});
+  }
+}, 120);
 // Underground Spawner Proximity Spawning (within 16 blocks)
 setInterval(() => {
   if(!playing) return;
